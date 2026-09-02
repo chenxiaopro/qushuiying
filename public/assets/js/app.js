@@ -475,7 +475,7 @@
   function openRecharge() {
     if (!loggedIn) { toast('请先登录'); showModal('loginModal'); return; }
     showModal('rechargeModal');
-    if (window.WM.payEnabled) renderPointsGrid();
+    if (window.WM.payEnabled || window.WM.alipayEnabled) renderPointsGrid();
   }
 
   /* 充值面板切换（只绑定一次） */
@@ -520,10 +520,20 @@
     var typeEl = document.querySelector('input[name="payType"]:checked');
     var type = typeEl ? typeEl.value : 'alipay';
     api('pay_create', { points: selectedPoints, type: type }).then(function (res) {
-      if (res.code === 0) {
+      if (res.code !== 0) { toast(res.msg); return; }
+      if (res.data.form) {
+        // 支付宝手机网站支付：自动提交表单跳转收银台
+        var wrap = document.createElement('div');
+        wrap.style.display = 'none';
+        wrap.innerHTML = res.data.form;
+        document.body.appendChild(wrap);
+        var f = wrap.querySelector('form');
+        showModal('payLoadingModal');
+        if (f) f.submit();
+      } else {
         showModal('payLoadingModal');
         window.location.href = res.data.pay_url;
-      } else { toast(res.msg); }
+      }
     });
   });
 

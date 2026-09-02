@@ -291,14 +291,17 @@ function admin_settings_get()
 {
     $keys = ['site_name', 'site_desc', 'announcement', 'parse_cost', 'register_points',
              'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_public_key', 'epay_private_key', 'epay_pay_types',
+             'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
                'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version'];
     $out = [];
     foreach ($keys as $k) {
         $out[$k] = setting($k);
     }
-    // 公众号弹窗开关默认关闭，避免旧库无此 key 时下拉未选中
-    if ($out['wechat_enabled'] === '' || $out['wechat_enabled'] === null) {
-        $out['wechat_enabled'] = '0';
+    // 开关类字段默认关闭，避免旧库无此 key 时下拉未选中导致保存校验失败
+    foreach (['wechat_enabled', 'epay_enabled', 'alipay_enabled'] as $switchKey) {
+        if ($out[$switchKey] === '' || $out[$switchKey] === null) {
+            $out[$switchKey] = '0';
+        }
     }
     ok($out);
 }
@@ -307,9 +310,10 @@ function admin_settings_save()
 {
     $fields = ['site_name', 'site_desc', 'announcement', 'parse_cost', 'register_points',
                'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_public_key', 'epay_private_key', 'epay_pay_types',
+             'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
              'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version'];
     // 数字字段必须为合法的非负整数
-    $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'wechat_enabled'];
+    $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'alipay_enabled', 'wechat_enabled'];
     foreach ($intFields as $k) {
         if (array_key_exists($k, $_POST) && preg_match('/^\d+$/', trim((string)$_POST[$k])) !== 1) {
             fail($k . ' 必须为非负整数');

@@ -163,10 +163,9 @@ class Epay
     /** 商户私钥签名（SHA256WithRSA，输出 base64） */
     private function rsaPrivateSign($data)
     {
-        $key = self::wrapKey($this->privateKey, 'PRIVATE KEY');
-        $privateKey = openssl_get_privatekey($key);
+        $privateKey = $this->resolveKey($this->privateKey, ['PRIVATE KEY', 'RSA PRIVATE KEY']);
         if (!$privateKey) {
-            throw new RuntimeException('签名失败：商户私钥错误');
+            throw new RuntimeException('签名失败：商户私钥错误（请确认后台已填写正确的商户私钥）');
         }
         openssl_sign($data, $sign, $privateKey, OPENSSL_ALGO_SHA256);
         return base64_encode($sign);
@@ -175,13 +174,32 @@ class Epay
     /** 平台公钥验签（SHA256WithRSA） */
     private function rsaPublicVerify($data, $sign)
     {
-        $key = self::wrapKey($this->publicKey, 'PUBLIC KEY');
-        $publicKey = openssl_get_publickey($key);
+        $publicKey = $this->resolveKey($this->publicKey, ['PUBLIC KEY', 'RSA PUBLIC KEY']);
         if (!$publicKey) {
-            throw new RuntimeException('验签失败：平台公钥错误');
+            throw new RuntimeException('验签失败：平台公钥错误（请确认后台已填写正确的平台公钥）');
         }
         $result = openssl_verify($data, base64_decode($sign), $publicKey, OPENSSL_ALGO_SHA256);
         return $result === 1;
+    }
+
+    /** 依次尝试多种 PEM 包装格式解析密钥，返回 openssl key 资源或 null */
+    private function resolveKey($key, $types)
+    {
+        $key = trim((string)$key);
+        if ($key === '') {
+            return null;
+        }
+        foreach ($types as $type) {
+            $pem = self::wrapKey($key, $type);
+            $res = @openssl_pkey_get_private($pem);
+            if ($res === false) {
+                $res = @openssl_pkey_get_public($pem);
+            }
+            if ($res !== false) {
+                return $res;
+            }
+        }
+        return null;
     }
 
     /** 将纯 base64 密钥包装为 PEM 格式（兼容已带 PEM 头的输入） */
