@@ -5,7 +5,7 @@
  */
 require_once __DIR__ . '/../app/init.php';
 require_once __DIR__ . '/../app/payment/Epay.php';
-require_once __DIR__ . '/../app/payment/AlipayWap.php';
+require_once __DIR__ . '/../app/payment/AlipayF2F.php';
 
 $siteName = setting('site_name', '短视频去水印');
 $siteDesc = setting('site_desc', '抖音、快手等短视频一键去水印下载');
@@ -19,7 +19,7 @@ $registerPoints = (int)setting('register_points', 0);
 $siteVersion = trim(setting('site_version', 'v1.1.0'));
 $payTypes = Epay::payTypes();
 $payEnabled = Epay::enabled();
-$alipayEnabled = AlipayWap::enabled();
+$alipayEnabled = AlipayF2F::enabled();
 $onlinePayEnabled = $payEnabled || $alipayEnabled;
 $payMethods = [];
 if ($payEnabled) {
@@ -28,7 +28,7 @@ if ($payEnabled) {
     }
 }
 if ($alipayEnabled) {
-    $payMethods['alipay_wap'] = '支付宝支付';
+    $payMethods['alipay_f2f'] = '支付宝当面付';
 }
 $csrf = csrf_token();
 ?>
@@ -235,6 +235,11 @@ $csrf = csrf_token();
       </div>
       <button class="btn btn-primary btn-block" id="paySubmit">立即支付</button>
       <div class="pay-tip">支付成功后点数自动到账</div>
+      <div class="f2f-qr hide" id="f2fQrWrap">
+        <p class="pay-tip">请使用支付宝扫描下方二维码完成支付</p>
+        <img id="f2fQrImg" alt="支付二维码" style="width:200px;height:200px;margin:8px auto;display:block">
+        <p class="pay-tip" id="f2fQrStatus">等待支付...</p>
+      </div>
     </div>
     <?php endif; ?>
 
@@ -269,6 +274,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260902b"></script>
+<script src="assets/js/app.js?v=20260902c"></script>
 </body>
 </html>
