@@ -86,6 +86,7 @@
     if (name === 'cards') loadCards(1);
     if (name === 'apis') loadApis(1);
     if (name === 'parseTypes') loadParseTypes();
+    if (name === 'versions') loadVersions();
     if (name === 'settings') loadSettings();
   }
 
@@ -394,6 +395,9 @@
       $('set_bark_sound').value = d.bark_sound;
       $('set_bark_notify_register').value = d.bark_notify_register;
       $('set_bark_notify_recharge').value = d.bark_notify_recharge;
+      $('set_share_title').value = d.share_title;
+      $('set_share_desc').value = d.share_desc;
+      $('set_share_image').value = d.share_image;
     });
   }
 
@@ -418,6 +422,15 @@
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
       toast('公众号设置已保存');
+    });
+  });
+  $('saveShareBtn').addEventListener('click', function () {
+    adminApi('save_settings', collectSettings(
+      ['share_title', 'share_desc', 'share_image']
+    )).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast('分享设置已保存');
     });
   });
   $('saveEpayBtn').addEventListener('click', function () {
@@ -561,6 +574,90 @@
     });
   });
   $('ptModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
+
+  /* ---------- 历史版本 ---------- */
+  var versionsDataCache = {};
+  var currentSiteVersion = '';
+
+  function verTypeName(t) {
+    return { update: '更新', optimize: '优化', fix: '修复' }[t] || '更新';
+  }
+
+  function loadVersions() {
+    adminApi('versions').then(function (res) {
+      if (!checkAuth(res)) return;
+      var d = res.data;
+      versionsDataCache = {};
+      currentSiteVersion = d.current || '';
+      d.list.forEach(function (v) { versionsDataCache[v.id] = v; });
+      if (!d.list.length) { $('versionsTable').innerHTML = '<p style="color:#8a90a3">暂无版本记录</p>'; }
+      else {
+        $('versionsTable').innerHTML =
+          '<div class="table-wrap"><table><thead><tr><th>ID</th><th>版本号</th><th>类型</th><th>标题</th><th>更新内容</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
+          d.list.map(function (v) {
+            var isCurrent = currentSiteVersion !== '' && v.version === currentSiteVersion;
+            return '<tr>' +
+              '<td>' + v.id + '</td>' +
+              '<td><code>' + esc(v.version) + '</code>' + (isCurrent ? ' <span class="badge-ok">当前</span>' : '') + '</td>' +
+              '<td>' + esc(verTypeName(v.type)) + '</td>' +
+              '<td>' + esc(v.title) + '</td>' +
+              '<td>' + esc(v.content || '-') + '</td>' +
+              '<td>' + esc(v.created_at) + '</td>' +
+              '<td>' +
+                '<button class="btn btn-sm" data-ver-edit="' + v.id + '">编辑</button> ' +
+                '<button class="btn btn-sm btn-danger" data-ver-del="' + v.id + '">删除</button>' +
+              '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+        bindVersionActions();
+      }
+    });
+  }
+
+  function bindVersionActions() {
+    document.querySelectorAll('[data-ver-edit]').forEach(function (b) {
+      b.addEventListener('click', function () { openVerModal(b.getAttribute('data-ver-edit')); });
+    });
+    document.querySelectorAll('[data-ver-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('确定删除该版本记录吗？')) return;
+        adminApi('version_delete', { id: b.getAttribute('data-ver-del') }).then(function (res) {
+          if (!checkAuth(res)) return;
+          toast('已删除');
+          loadVersions();
+        });
+      });
+    });
+  }
+
+  function openVerModal(id) {
+    $('verModalTitle').textContent = id ? '编辑版本' : '新增版本';
+    var v = id ? versionsDataCache[id] : null;
+    $('verId').value = id || '';
+    $('verVersion').value = v ? v.version : '保存时自动生成';
+    $('verType').value = v ? v.type : 'update';
+    $('verTitle').value = v ? v.title : '';
+    $('verContent').value = v ? v.content : '';
+    $('verModal').classList.remove('hide');
+  }
+
+  $('verAddBtn').addEventListener('click', function () { openVerModal(null); });
+  $('verSaveBtn').addEventListener('click', function () {
+    var id = $('verId').value;
+    var params = {
+      id: id,
+      type: $('verType').value,
+      title: $('verTitle').value.trim(),
+      content: $('verContent').value.trim()
+    };
+    adminApi('version_save', params).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      $('verModal').classList.add('hide');
+      toast(res.data && res.data.version ? ('已保存，当前版本 ' + res.data.version) : '已保存');
+      loadVersions();
+    });
+  });
+  $('verModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
 
   /* ---------- 接口管理 ---------- */
   function loadApis(page, q) {

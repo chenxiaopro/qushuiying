@@ -144,17 +144,15 @@ $upstreamClen    = null;
 $upstreamCrange  = null;
 
 $ch = curl_init();
-curl_setopt_array($ch, [
+curl_setopt_array($ch, http_ssl_opts(false) + [
     CURLOPT_URL            => $url,
     CURLOPT_RETURNTRANSFER => false,
     CURLOPT_FOLLOWLOCATION => true,
     CURLOPT_MAXREDIRS      => 5,
     CURLOPT_CONNECTTIMEOUT => 8,
     CURLOPT_TIMEOUT        => 300,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
-        CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+    CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+    CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
     CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
     CURLOPT_REFERER        => $referer,
     CURLOPT_ENCODING       => 'identity',
