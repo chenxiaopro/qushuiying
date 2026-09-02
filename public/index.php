@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/../app/init.php';
 require_once __DIR__ . '/../app/payment/Epay.php';
+require_once __DIR__ . '/../app/payment/AlipayF2F.php';
 
 $siteName = setting('site_name', '短视频去水印');
 $siteDesc = setting('site_desc', '抖音、快手等短视频一键去水印下载');
@@ -18,6 +19,17 @@ $registerPoints = (int)setting('register_points', 0);
 $siteVersion = trim(setting('site_version', 'v1.1.0'));
 $payTypes = Epay::payTypes();
 $payEnabled = Epay::enabled();
+$alipayEnabled = AlipayF2F::enabled();
+$onlinePayEnabled = $payEnabled || $alipayEnabled;
+$payMethods = [];
+if ($payEnabled) {
+    foreach ($payTypes as $key => $name) {
+        $payMethods[$key] = $name;
+    }
+}
+if ($alipayEnabled) {
+    $payMethods['alipay_f2f'] = '支付宝当面付';
+}
 $csrf = csrf_token();
 ?>
 <!DOCTYPE html>
@@ -205,23 +217,29 @@ $csrf = csrf_token();
     <div class="modal-title">充值中心</div>
 
     <div class="recharge-tabs">
-      <?php if ($payEnabled): ?><span class="tab active" data-tab="pay">在线支付</span><?php endif; ?>
-      <span class="tab<?= $payEnabled ? '' : ' active' ?>" data-tab="card">卡密充值</span>
+      <?php if ($onlinePayEnabled): ?><span class="tab active" data-tab="pay">在线支付</span><?php endif; ?>
+      <span class="tab<?= $onlinePayEnabled ? '' : ' active' ?>" data-tab="card">卡密充值</span>
     </div>
 
-    <?php if ($payEnabled): ?>
+    <?php if ($onlinePayEnabled): ?>
     <div class="tab-panel" id="panel-pay">
       <div class="points-grid" id="pointsGrid"></div>
       <div class="pay-methods">
-        <?php foreach ($payTypes as $key => $name): ?>
+        <?php $firstPayKey = array_key_first($payMethods); ?>
+        <?php foreach ($payMethods as $key => $name): ?>
         <label class="pay-method">
-          <input type="radio" name="payType" value="<?= $key ?>" <?= $key === array_key_first($payTypes) ? 'checked' : '' ?>>
+          <input type="radio" name="payType" value="<?= $key ?>" <?= $key === $firstPayKey ? 'checked' : '' ?>>
           <span><?= $name ?></span>
         </label>
         <?php endforeach; ?>
       </div>
       <button class="btn btn-primary btn-block" id="paySubmit">立即支付</button>
       <div class="pay-tip">支付成功后点数自动到账</div>
+      <div class="f2f-qr hide" id="f2fQrWrap">
+        <p class="pay-tip">请使用支付宝扫描下方二维码完成支付</p>
+        <img id="f2fQrImg" alt="支付二维码" style="width:200px;height:200px;margin:8px auto;display:block">
+        <p class="pay-tip" id="f2fQrStatus">等待支付...</p>
+      </div>
     </div>
     <?php endif; ?>
 
@@ -249,6 +267,7 @@ window.WM = {
   siteName: <?= json_encode($siteName, JSON_UNESCAPED_UNICODE) ?>,
   parseCost: <?= (int)$parseCost ?>,
   payEnabled: <?= $payEnabled ? 'true' : 'false' ?>,
+  alipayEnabled: <?= $alipayEnabled ? 'true' : 'false' ?>,
   payTypes: <?= json_encode($payTypes, JSON_UNESCAPED_UNICODE) ?>,
   pointsPerYuan: <?= (int)setting('points_per_yuan', 10) ?>,
   announcement: <?= json_encode($announcement, JSON_UNESCAPED_UNICODE) ?>,

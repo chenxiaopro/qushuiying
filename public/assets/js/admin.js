@@ -316,6 +316,10 @@
       $('set_epay_pid').value = d.epay_pid;
       $('set_epay_public_key').value = d.epay_public_key;
       $('set_epay_private_key').value = d.epay_private_key;
+      $('set_alipay_enabled').value = d.alipay_enabled;
+      $('set_alipay_app_id').value = d.alipay_app_id;
+      $('set_alipay_private_key').value = d.alipay_private_key;
+      $('set_alipay_public_key').value = d.alipay_public_key;
       $('set_wechat_enabled').value = d.wechat_enabled;
       $('set_wechat_name').value = d.wechat_name;
       $('set_wechat_qrcode').value = d.wechat_qrcode;
@@ -354,6 +358,15 @@
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
       toast('支付配置已保存');
+    });
+  });
+  $('saveAlipayBtn').addEventListener('click', function () {
+    adminApi('save_settings', collectSettings(
+      ['alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key']
+    )).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast('当面付配置已保存');
     });
   });
 

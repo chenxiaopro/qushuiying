@@ -7,13 +7,15 @@
  *   POST logout        退出
  *   GET  me            当前用户信息
  *   POST parse         解析去水印（消耗点数）
- *   POST pay_create    创建充值订单（易支付）
+ *   POST pay_create    创建充值订单（易支付/支付宝当面付）
+ *   POST pay_query     查询订单支付状态
  *   POST recharge_card 卡密充值
  */
 
 require_once __DIR__ . '/../app/init.php';
 require_once __DIR__ . '/../app/ParserFactory.php';
 require_once __DIR__ . '/../app/payment/Epay.php';
+require_once __DIR__ . '/../app/payment/AlipayF2F.php';
 
 try {
     $action = input('action', '');
@@ -47,6 +49,9 @@ try {
             break;
         case 'pay_create':
             api_pay_create();
+            break;
+        case 'pay_query':
+            api_pay_query();
             break;
         case 'recharge_card':
             api_recharge_card();
@@ -227,14 +232,9 @@ function api_parse()
 function api_pay_create()
 {
     $u = require_login();
-    if (!Epay::enabled()) {
-        fail('支付通道未开启，请联系站长充值');
-    }
 
     $type = input('type', 'alipay');
-    if (!in_array($type, array_keys(Epay::payTypes()), true)) {
-        fail('不支持的支付方式');
-    }
+    $subject = setting('site_name', '点数充值');
 
     $points = max(1, min(100000, (int)input('points', 0)));
     $perYuan = max(1, (int)setting('points_per_yuan', 10));
@@ -244,13 +244,56 @@ function api_pay_create()
     }
     $orderSn = gen_order_sn();
 
+    // 支付宝当面付通道
+    if ($type === 'alipay_f2f') {
+        if (!AlipayF2F::enabled()) {
+            fail('支付宝当面付通道未开启，请联系站长充值');
+        }
+        DB::execute('INSERT INTO orders(order_sn,user_id,amount,points,status,pay_type,created_at) VALUES(?,?,?,?,0,?,NOW())', [
+            $orderSn, $u['id'], $money, $points, $type,
+        ]);
+        try {
+            $alipay = new AlipayF2F(setting('alipay_app_id'), setting('alipay_private_key'), setting('alipay_public_key'));
+            $qrCode = $alipay->precreate($orderSn, $money, $subject . '-' . $points . '点');
+        } catch (RuntimeException $e) {
+            fail('支付配置错误：' . $e->getMessage());
+        }
+        ok(['order_sn' => $orderSn, 'qr_code' => $qrCode, 'money' => $money, 'points' => $points, 'type' => 'alipay_f2f']);
+    }
+
+    // 易支付通道
+    if (!Epay::enabled()) {
+        fail('支付通道未开启，请联系站长充值');
+    }
+    if (!in_array($type, array_keys(Epay::payTypes()), true)) {
+        fail('不支持的支付方式');
+    }
+
     DB::execute('INSERT INTO orders(order_sn,user_id,amount,points,status,pay_type,created_at) VALUES(?,?,?,?,0,?,NOW())', [
         $orderSn, $u['id'], $money, $points, $type,
     ]);
 
-    $epay = new Epay(setting('epay_api'), setting('epay_pid'), setting('epay_public_key'), setting('epay_private_key'));
-    $url = $epay->submitUrl($orderSn, $money, $type, setting('site_name', '点数充值') . '-' . $points . '点');
-    ok(['order_sn' => $orderSn, 'pay_url' => $url, 'money' => $money, 'points' => $points]);
+    try {
+        $epay = new Epay(setting('epay_api'), setting('epay_pid'), setting('epay_public_key'), setting('epay_private_key'));
+        $url = $epay->submitUrl($orderSn, $money, $type, $subject . '-' . $points . '点');
+    } catch (RuntimeException $e) {
+        fail('支付配置错误：' . $e->getMessage());
+    }
+    ok(['order_sn' => $orderSn, 'pay_url' => $url, 'money' => $money, 'points' => $points, 'type' => $type]);
+}
+
+function api_pay_query()
+{
+    $u = require_login();
+    $orderSn = trim((string)input('order_sn', ''));
+    if ($orderSn === '') {
+        fail('缺少订单号');
+    }
+    $order = DB::one('SELECT id,status,points FROM orders WHERE order_sn=? AND user_id=?', [$orderSn, $u['id']]);
+    if (!$order) {
+        fail('订单不存在');
+    }
+    ok(['status' => (int)$order['status'], 'points' => (int)$order['points']]);
 }
 
 function api_recharge_card()

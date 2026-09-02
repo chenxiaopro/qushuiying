@@ -79,7 +79,8 @@ class DB
         try {
             self::$pdo->exec("INSERT IGNORE INTO `settings` (`k`,`v`) VALUES
                 ('wechat_enabled','0'),('wechat_name',''),('wechat_qrcode',''),('wechat_desc',''),('site_version','v1.1.0'),
-                ('epay_public_key',''),('epay_private_key','')");
+                ('epay_public_key',''),('epay_private_key',''),
+                ('alipay_enabled','0'),('alipay_app_id',''),('alipay_private_key',''),('alipay_public_key','')");
         } catch (Throwable $e) {
             // 忽略
         }

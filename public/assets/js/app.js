@@ -475,7 +475,7 @@
   function openRecharge() {
     if (!loggedIn) { toast('请先登录'); showModal('loginModal'); return; }
     showModal('rechargeModal');
-    if (window.WM.payEnabled) renderPointsGrid();
+    if (window.WM.payEnabled || window.WM.alipayEnabled) renderPointsGrid();
   }
 
   /* 充值面板切换（只绑定一次） */
@@ -515,15 +515,36 @@
     });
   }
 
+  var f2fPollTimer = null;
+  function stopF2fPoll() {
+    if (f2fPollTimer) { clearInterval(f2fPollTimer); f2fPollTimer = null; }
+    if ($('f2fQrWrap')) $('f2fQrWrap').classList.add('hide');
+  }
+
   if ($('paySubmit')) $('paySubmit').addEventListener('click', function () {
     if (selectedPoints <= 0) { toast('请选择充值点数'); return; }
     var typeEl = document.querySelector('input[name="payType"]:checked');
     var type = typeEl ? typeEl.value : 'alipay';
+    stopF2fPoll();
     api('pay_create', { points: selectedPoints, type: type }).then(function (res) {
-      if (res.code === 0) {
+      if (res.code !== 0) { toast(res.msg); return; }
+      if (res.data.qr_code) {
+        $('f2fQrWrap').classList.remove('hide');
+        $('f2fQrStatus').textContent = '等待支付...';
+        $('f2fQrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=0&data=' + encodeURIComponent(res.data.qr_code);
+        f2fPollTimer = setInterval(function () {
+          api('pay_query', { order_sn: res.data.order_sn }).then(function (r) {
+            if (r.code === 0 && r.data.status === 1) {
+              stopF2fPoll();
+              $('f2fQrStatus').textContent = '支付成功，点数已到账';
+              refreshMe();
+            }
+          });
+        }, 2000);
+      } else {
         showModal('payLoadingModal');
         window.location.href = res.data.pay_url;
-      } else { toast(res.msg); }
+      }
     });
   });
 
