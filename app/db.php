@@ -78,9 +78,11 @@ class DB
         }
         try {
             self::$pdo->exec("INSERT IGNORE INTO `settings` (`k`,`v`) VALUES
-                ('wechat_enabled','0'),('wechat_name',''),('wechat_qrcode',''),('wechat_desc',''),('site_version','v1.1.0'),
+                ('wechat_enabled','0'),('wechat_name',''),('wechat_qrcode',''),('wechat_desc',''),('site_version','v1.2.0'),
                 ('epay_public_key',''),('epay_private_key',''),
-                ('alipay_enabled','0'),('alipay_app_id',''),('alipay_private_key',''),('alipay_public_key','')");
+                ('alipay_enabled','0'),('alipay_app_id',''),('alipay_private_key',''),('alipay_public_key',''),
+                ('bark_enabled','0'),('bark_server','https://api.day.app'),('bark_key',''),('bark_notify_register','0'),('bark_notify_recharge','0')");
+            self::$pdo->exec("UPDATE `settings` SET `v`='v1.2.0' WHERE `k`='site_version' AND `v`='v1.1.0'");
         } catch (Throwable $e) {
             // 忽略
         }

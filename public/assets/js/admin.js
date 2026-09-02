@@ -325,6 +325,11 @@
       $('set_wechat_qrcode').value = d.wechat_qrcode;
       $('set_wechat_desc').value = d.wechat_desc;
       $('set_site_version').value = d.site_version;
+      $('set_bark_enabled').value = d.bark_enabled;
+      $('set_bark_server').value = d.bark_server;
+      $('set_bark_key').value = d.bark_key;
+      $('set_bark_notify_register').value = d.bark_notify_register;
+      $('set_bark_notify_recharge').value = d.bark_notify_recharge;
     });
   }
 
@@ -367,6 +372,15 @@
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
       toast('支付宝配置已保存');
+    });
+  });
+  $('saveBarkBtn').addEventListener('click', function () {
+    adminApi('save_settings', collectSettings(
+      ['bark_enabled', 'bark_server', 'bark_key', 'bark_notify_register', 'bark_notify_recharge']
+    )).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast('Bark 配置已保存');
     });
   });
 

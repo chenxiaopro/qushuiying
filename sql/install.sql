@@ -141,7 +141,12 @@ INSERT INTO `settings` (`k`, `v`) VALUES
 ('wechat_name', ''),
 ('wechat_qrcode', ''),
 ('wechat_desc', ''),
-('site_version', 'v1.1.0')
+('bark_enabled', '0'),
+('bark_server', 'https://api.day.app'),
+('bark_key', ''),
+('bark_notify_register', '0'),
+('bark_notify_recharge', '0'),
+('site_version', 'v1.2.0')
 ON DUPLICATE KEY UPDATE `k`=`k`;
 
 -- 默认解析类型
