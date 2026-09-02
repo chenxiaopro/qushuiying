@@ -314,9 +314,8 @@
       $('set_epay_pay_types').value = d.epay_pay_types;
       $('set_epay_api').value = d.epay_api;
       $('set_epay_pid').value = d.epay_pid;
-      // 支付密钥不回填真实值，留空表示不修改
-      $('set_epay_key').value = '';
-      $('set_epay_key').placeholder = d.epay_key ? '已配置（留空保持不变）' : '请输入商户 KEY';
+      $('set_epay_public_key').value = d.epay_public_key;
+      $('set_epay_private_key').value = d.epay_private_key;
       $('set_wechat_enabled').value = d.wechat_enabled;
       $('set_wechat_name').value = d.wechat_name;
       $('set_wechat_qrcode').value = d.wechat_qrcode;
@@ -350,7 +349,7 @@
   });
   $('saveEpayBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
-      ['epay_enabled', 'epay_pay_types', 'epay_api', 'epay_pid', 'epay_key']
+      ['epay_enabled', 'epay_pay_types', 'epay_api', 'epay_pid', 'epay_public_key', 'epay_private_key']
     )).then(function (res) {
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }

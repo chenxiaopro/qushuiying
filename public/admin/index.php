@@ -244,21 +244,26 @@ require_once __DIR__ . '/../../app/init.php';
           </div>
           <div>
             <label>易支付 API 地址</label>
-            <input class="field" id="set_epay_api" placeholder="https://pay.example.com">
+            <input class="field" id="set_epay_api" placeholder="https://www.ezfp.cn/">
           </div>
           <div>
             <label>商户 ID (pid)</label>
             <input class="field" id="set_epay_pid">
           </div>
           <div>
-            <label>商户 KEY</label>
-            <input class="field" id="set_epay_key" type="password" placeholder="已配置，留空则不修改">
+            <label>平台公钥（验签用）</label>
+            <textarea class="field" id="set_epay_public_key" rows="4" placeholder="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8..."></textarea>
+          </div>
+          <div>
+            <label>商户私钥（签名用）</label>
+            <textarea class="field" id="set_epay_private_key" rows="4" placeholder="MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBK..."></textarea>
           </div>
         </div>
         <button class="btn btn-primary" id="saveEpayBtn" style="margin-top:16px">保存支付配置</button>
         <div class="page-title" style="margin-top:18px">支付回调配置</div>
         <p style="font-size:13px;color:#8a90a3">
-          在易支付后台将「异步通知地址」配置为：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/api.php?action=pay_notify') ?></code>
+          在易支付后台将「异步通知地址」配置为：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/pay_notify.php') ?></code><br>
+          「同步跳转地址」配置为：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/pay_return.php') ?></code>
         </p>
       </div>
     </div>
