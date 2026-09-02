@@ -286,8 +286,8 @@ require_once __DIR__ . '/../../app/init.php';
             <textarea class="field" id="set_alipay_private_key" rows="4" placeholder="MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBK..."></textarea>
           </div>
           <div>
-            <label>支付宝公钥（验签用）</label>
-            <textarea class="field" id="set_alipay_public_key" rows="4" placeholder="MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8..."></textarea>
+            <label>支付宝公钥（验签用，非应用公钥）</label>
+            <textarea class="field" id="set_alipay_public_key" rows="4" placeholder="在支付宝开放平台「开发设置-接口加签方式」中查看/下载的支付宝公钥"></textarea>
           </div>
         </div>
         <button class="btn btn-primary" id="saveAlipayBtn" style="margin-top:16px">保存当面付配置</button>

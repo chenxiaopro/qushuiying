@@ -46,13 +46,22 @@ class AlipayF2F
         ];
         $params = $this->buildParams('alipay.trade.precreate', $biz);
         $response = http_post($this->gateway, $params, [], 20, false);
-        if (!$this->verifySyncResponse($response, 'alipay.trade.precreate')) {
-            throw new RuntimeException('支付宝返回验签失败');
-        }
         $data = json_decode($response, true);
+
+        if (is_array($data) && isset($data['error_response'])) {
+            $e = $data['error_response'];
+            throw new RuntimeException('支付宝接口错误：' . ($e['sub_msg'] ?? ($e['msg'] ?? '未知错误')));
+        }
+        if (!$this->verifySyncResponse($response, 'alipay.trade.precreate')) {
+            error_log('[wm-alipay] precreate 验签失败：' . $response);
+            throw new RuntimeException('支付宝返回验签失败，请确认后台填写的是「支付宝公钥」而非「应用公钥」');
+        }
         $resp = $data['alipay_trade_precreate_response'] ?? null;
-        if (!is_array($resp) || ($resp['code'] ?? '') !== '10000' || empty($resp['qr_code'])) {
-            throw new RuntimeException(is_array($resp) ? ($resp['sub_msg'] ?? ($resp['msg'] ?? '预创建失败')) : '预创建失败');
+        if (!is_array($resp)) {
+            throw new RuntimeException('支付宝响应格式异常');
+        }
+        if (($resp['code'] ?? '') !== '10000' || empty($resp['qr_code'])) {
+            throw new RuntimeException('支付宝下单失败：' . ($resp['sub_msg'] ?? ($resp['msg'] ?? '未知错误')));
         }
         return $resp['qr_code'];
     }
@@ -64,6 +73,7 @@ class AlipayF2F
         $params = $this->buildParams('alipay.trade.query', $biz);
         $response = http_post($this->gateway, $params, [], 20, false);
         if (!$this->verifySyncResponse($response, 'alipay.trade.query')) {
+            error_log('[wm-alipay] query 验签失败：' . $response);
             return null;
         }
         $data = json_decode($response, true);
@@ -108,7 +118,8 @@ class AlipayF2F
             'notify_url'  => $this->siteUrl() . '/alipay_notify.php',
             'biz_content' => json_encode($biz, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ];
-        $params['sign'] = $this->rsaPrivateSign($this->getSignContent($params));
+        // 请求签名时 sign_type 参与签名（支付宝请求签名规则），仅剔除 sign
+        $params['sign'] = $this->rsaPrivateSign($this->getSignContent($params, false));
         return $params;
     }
 
@@ -156,13 +167,13 @@ class AlipayF2F
         return $this->rsaPublicVerify($content, $sign);
     }
 
-    /** 待签名字符串：剔除 sign/sign_type/空值/@开头，按 key 升序 k=v&k=v 拼接 */
-    private function getSignContent($params)
+    /** 待签名字符串：按 key 升序 k=v&k=v 拼接，剔除 sign/空值/@开头；excludeSignType=true 时额外剔除 sign_type */
+    private function getSignContent($params, $excludeSignType = true)
     {
         ksort($params);
         $pairs = [];
         foreach ($params as $k => $v) {
-            if ($this->isEmpty($v) || strpos($v, '@') === 0 || $k === 'sign' || $k === 'sign_type') {
+            if ($this->isEmpty($v) || strpos($v, '@') === 0 || $k === 'sign' || ($excludeSignType && $k === 'sign_type')) {
                 continue;
             }
             $pairs[] = $k . '=' . $v;
