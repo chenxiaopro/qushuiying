@@ -7,7 +7,7 @@
  *   POST logout        退出
  *   GET  me            当前用户信息
  *   POST parse         解析去水印（消耗点数）
- *   POST pay_create    创建充值订单（易支付/支付宝手机网站支付）
+ *   POST pay_create    创建充值订单（易支付/支付宝当面付）
  *   POST pay_query     查询订单支付状态
  *   POST recharge_card 卡密充值
  */
@@ -15,7 +15,7 @@
 require_once __DIR__ . '/../app/init.php';
 require_once __DIR__ . '/../app/ParserFactory.php';
 require_once __DIR__ . '/../app/payment/Epay.php';
-require_once __DIR__ . '/../app/payment/AlipayWap.php';
+require_once __DIR__ . '/../app/payment/AlipayF2F.php';
 
 try {
     $action = input('action', '');
@@ -244,22 +244,21 @@ function api_pay_create()
     }
     $orderSn = gen_order_sn();
 
-    // 支付宝手机网站支付通道
-    if ($type === 'alipay_wap') {
-        if (!AlipayWap::enabled()) {
+    // 支付宝当面付通道
+    if ($type === 'alipay_f2f') {
+        if (!AlipayF2F::enabled()) {
             fail('支付宝支付通道未开启，请联系站长充值');
         }
         DB::execute('INSERT INTO orders(order_sn,user_id,amount,points,status,pay_type,created_at) VALUES(?,?,?,?,0,?,NOW())', [
             $orderSn, $u['id'], $money, $points, $type,
         ]);
         try {
-            $alipay = new AlipayWap(setting('alipay_app_id'), setting('alipay_private_key'), setting('alipay_public_key'));
-            $returnUrl = trim((string)cfg('site_url', ''));
-            $form = $alipay->buildForm($orderSn, $money, $subject . '-' . $points . '点', $returnUrl);
+            $alipay = new AlipayF2F(setting('alipay_app_id'), setting('alipay_private_key'), setting('alipay_public_key'));
+            $qrCode = $alipay->precreate($orderSn, $money, $subject . '-' . $points . '点');
         } catch (RuntimeException $e) {
             fail('支付配置错误：' . $e->getMessage());
         }
-        ok(['order_sn' => $orderSn, 'form' => $form, 'money' => $money, 'points' => $points, 'type' => 'alipay_wap']);
+        ok(['order_sn' => $orderSn, 'qr_code' => $qrCode, 'money' => $money, 'points' => $points, 'type' => 'alipay_f2f']);
     }
 
     // 易支付通道

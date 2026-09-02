@@ -1,18 +1,18 @@
 <?php
 /**
- * 支付宝手机网站支付异步通知入口（POST，支付宝服务器直接回调）
+ * 支付宝当面付异步通知入口（POST，支付宝服务器直接回调）
  * 验签成功后更新订单状态并给用户加点，返回 success
  */
 
 require_once __DIR__ . '/../app/init.php';
-require_once __DIR__ . '/../app/payment/AlipayWap.php';
+require_once __DIR__ . '/../app/payment/AlipayF2F.php';
 
-if (!AlipayWap::enabled()) {
+if (!AlipayF2F::enabled()) {
     exit('fail');
 }
 
 try {
-    $alipay = new AlipayWap(setting('alipay_app_id'), setting('alipay_private_key'), setting('alipay_public_key'));
+    $alipay = new AlipayF2F(setting('alipay_app_id'), setting('alipay_private_key'), setting('alipay_public_key'));
     $info = $alipay->verifyNotify($_POST);
     if (!$info) {
         exit('fail');
@@ -20,6 +20,10 @@ try {
 
     $order = DB::one('SELECT * FROM orders WHERE order_sn=?', [$info['order_sn']]);
     if (!$order) {
+        exit('fail');
+    }
+    if (abs((float)$order['amount'] - (float)$info['money']) > 0.01) {
+        error_log('[wm-alipay] 金额不符：order=' . $order['amount'] . ' notify=' . $info['money']);
         exit('fail');
     }
     if ((int)$order['status'] === 0) {

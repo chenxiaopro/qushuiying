@@ -267,11 +267,11 @@ require_once __DIR__ . '/../../app/init.php';
         </p>
       </div>
 
-      <div class="page-title">支付宝支付（手机网站 H5）配置</div>
+      <div class="page-title">支付宝当面付配置</div>
       <div class="card">
         <div class="form-grid">
           <div>
-            <label>支付宝支付开关</label>
+            <label>支付宝当面付开关</label>
             <select class="field" id="set_alipay_enabled">
               <option value="0">关闭</option>
               <option value="1">开启</option>
@@ -294,7 +294,7 @@ require_once __DIR__ . '/../../app/init.php';
         <div class="page-title" style="margin-top:18px">支付回调说明</div>
         <p style="font-size:13px;color:#8a90a3">
           系统会在下单时自动使用「异步通知地址」：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/alipay_notify.php') ?></code><br>
-          请在支付宝开放平台开通「手机网站支付」产品，确保应用已上线，并在应用设置中配置好「接口加签方式」（RSA2）。
+          请在支付宝开放平台开通「当面付」产品，确保应用已上线，并在应用设置中配置好「接口加签方式」（RSA2）。
         </p>
       </div>
     </div>
@@ -440,6 +440,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260902b"></script>
+<script src="../assets/js/admin.js?v=20260902c"></script>
 </body>
 </html>
