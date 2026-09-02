@@ -267,11 +267,11 @@ require_once __DIR__ . '/../../app/init.php';
         </p>
       </div>
 
-      <div class="page-title">支付宝当面付配置</div>
+      <div class="page-title">支付宝支付（手机网站 H5）配置</div>
       <div class="card">
         <div class="form-grid">
           <div>
-            <label>当面付开关</label>
+            <label>支付宝支付开关</label>
             <select class="field" id="set_alipay_enabled">
               <option value="0">关闭</option>
               <option value="1">开启</option>
@@ -290,11 +290,11 @@ require_once __DIR__ . '/../../app/init.php';
             <textarea class="field" id="set_alipay_public_key" rows="4" placeholder="在支付宝开放平台「开发设置-接口加签方式」中查看/下载的支付宝公钥"></textarea>
           </div>
         </div>
-        <button class="btn btn-primary" id="saveAlipayBtn" style="margin-top:16px">保存当面付配置</button>
-        <div class="page-title" style="margin-top:18px">当面付回调说明</div>
+        <button class="btn btn-primary" id="saveAlipayBtn" style="margin-top:16px">保存支付宝配置</button>
+        <div class="page-title" style="margin-top:18px">支付回调说明</div>
         <p style="font-size:13px;color:#8a90a3">
           系统会在下单时自动使用「异步通知地址」：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/alipay_notify.php') ?></code><br>
-          请在支付宝开放平台开通「当面付」产品，并确保应用已上线。
+          请在支付宝开放平台开通「手机网站支付」产品，确保应用已上线，并在应用设置中配置好「接口加签方式」（RSA2）。
         </p>
       </div>
     </div>
@@ -440,6 +440,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260902a"></script>
+<script src="../assets/js/admin.js?v=20260902b"></script>
 </body>
 </html>

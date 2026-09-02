@@ -366,7 +366,7 @@
     )).then(function (res) {
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
-      toast('当面付配置已保存');
+      toast('支付宝配置已保存');
     });
   });
 
