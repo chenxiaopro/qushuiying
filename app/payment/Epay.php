@@ -1,13 +1,13 @@
 <?php
 /**
- * 易支付（彩虹/异次元通用接口）对接
+ * 易支付 V2 对接（SHA256WithRSA 签名）
  *
  * 支付流程：
- *   1. 创建订单 -> 调用 submitUrl() 获得支付跳转地址
- *   2. 用户支付 -> 支付平台异步通知 notifyUrl -> 校验签名 -> 更新订单并给用户加点
- *   3. 同步跳转 returnUrl 展示结果
+ *   1. 创建订单 -> submitUrl() 获得支付跳转地址（页面跳转支付）
+ *   2. 用户支付 -> 平台异步通知 pay_notify.php -> 验签 -> 更新订单并给用户加点
+ *   3. 同步跳转 pay_return.php 展示结果
  *
- * 后台设置中填写 易支付API地址、商户ID、商户KEY 并开启开关即可生效。
+ * 后台设置需填写：易支付API地址、商户ID、平台公钥、商户私钥 并开启开关。
  */
 
 require_once __DIR__ . '/../functions.php';
@@ -17,13 +17,16 @@ class Epay
 {
     private $api;
     private $pid;
-    private $key;
+    private $publicKey;
+    private $privateKey;
+    private $signType = 'RSA';
 
-    public function __construct($api, $pid, $key)
+    public function __construct($api, $pid, $publicKey, $privateKey)
     {
         $this->api = rtrim($api, '/');
         $this->pid = $pid;
-        $this->key = $key;
+        $this->publicKey = trim((string)$publicKey);
+        $this->privateKey = trim((string)$privateKey);
     }
 
     public static function enabled()
@@ -31,14 +34,15 @@ class Epay
         return setting('epay_enabled') == '1'
             && setting('epay_api')
             && setting('epay_pid')
-            && setting('epay_key');
+            && setting('epay_public_key')
+            && setting('epay_private_key');
     }
 
     /** 支持的支付方式列表 */
     public static function payTypes()
     {
         $t = setting('epay_pay_types', 'alipay,wxpay');
-        $map = ['alipay' => '支付宝', 'wxpay' => '微信'];
+        $map = ['alipay' => '支付宝', 'wxpay' => '微信', 'qqpay' => 'QQ钱包', 'bank' => '云闪付', 'jdpay' => '京东支付'];
         $out = [];
         foreach (explode(',', $t) as $p) {
             $p = trim($p);
@@ -49,74 +53,148 @@ class Epay
         return $out ?: ['alipay' => '支付宝', 'wxpay' => '微信'];
     }
 
-    /** 生成支付跳转地址 */
+    /** 生成页面跳转支付地址（api/pay/submit） */
     public function submitUrl($orderSn, $money, $type, $name)
     {
-        $notifyUrl = $this->siteUrl() . '/api.php?action=pay_notify';
-        $returnUrl = $this->siteUrl() . '/api.php?action=pay_return';
         $params = [
-            'pid'          => $this->pid,
             'type'         => $type,
+            'notify_url'   => $this->siteUrl() . '/pay_notify.php',
+            'return_url'   => $this->siteUrl() . '/pay_return.php',
             'out_trade_no' => $orderSn,
-            'notify_url'   => $notifyUrl,
-            'return_url'   => $returnUrl,
             'name'         => $name,
             'money'        => sprintf('%.2f', $money),
         ];
-        $params['sign'] = $this->sign($params);
-        $params['sign_type'] = 'MD5';
-        return $this->api . '/submit.php?' . http_build_query($params);
-    }
-
-    /** 彩虹易支付标准签名：参数按 key 升序拼接后附商户密钥，md5 大写 */
-    private function sign(array $params)
-    {
-        $params = array_filter($params, function ($k) {
-            return $k !== 'sign' && $k !== 'sign_type';
-        }, ARRAY_FILTER_USE_KEY);
-        $params['key'] = $this->key;
-        ksort($params);
-        $pairs = [];
-        foreach ($params as $k => $v) {
-            if ($v === '' || $v === null) {
-                continue;
-            }
-            $pairs[] = $k . '=' . $v;
-        }
-        return strtoupper(md5(implode('&', $pairs)));
+        $params = $this->buildRequestParam($params);
+        return $this->api . '/api/pay/submit?' . http_build_query($params);
     }
 
     /** 校验异步通知，成功返回 ['order_sn','money','type','trade_no','trade_status']，失败返回 null */
     public function verifyNotify($data)
     {
-        $sign = $data['sign'] ?? '';
-        $pid = $data['pid'] ?? '';
-        $tradeNo = $data['trade_no'] ?? '';
-        $orderSn = $data['out_trade_no'] ?? '';
-        $type = $data['type'] ?? '';
-        $money = $data['money'] ?? '';
-
-        if ($pid !== $this->pid) {
+        if (!$this->verify($data)) {
             return null;
         }
-        $allowed = ['pid', 'trade_no', 'out_trade_no', 'type', 'name', 'money', 'trade_status', 'param'];
-        $clean = [];
-        foreach ($allowed as $k) {
-            if (array_key_exists($k, $data)) {
-                $clean[$k] = $data[$k];
-            }
-        }
-        $expected = $this->sign($clean);
-        if (strtoupper((string)$sign) !== $expected) {
+        if (($data['pid'] ?? '') !== $this->pid) {
             return null;
         }
         return [
-            'order_sn'     => $orderSn,
-            'money'        => $money,
-            'type'         => $type,
-            'trade_no'     => $tradeNo,
+            'order_sn'     => $data['out_trade_no'] ?? '',
+            'money'        => $data['money'] ?? '',
+            'type'         => $data['type'] ?? '',
+            'trade_no'     => $data['trade_no'] ?? '',
             'trade_status' => $data['trade_status'] ?? '',
         ];
+    }
+
+    /** 查询订单支付状态（api/pay/query），返回订单数组或 null */
+    public function queryOrder($outTradeNo = '', $tradeNo = '')
+    {
+        $params = [];
+        if ($tradeNo !== '') {
+            $params['trade_no'] = $tradeNo;
+        } elseif ($outTradeNo !== '') {
+            $params['out_trade_no'] = $outTradeNo;
+        } else {
+            return null;
+        }
+        $result = $this->execute('api/pay/query', $params);
+        return is_array($result) ? $result : null;
+    }
+
+    /** 发起 API 请求（api/pay/create 等）并验签 */
+    public function execute($path, $params)
+    {
+        $path = ltrim($path, '/');
+        $url = $this->api . '/' . $path;
+        $param = $this->buildRequestParam($params);
+        $response = http_post($url, $param, [], 20, false);
+        $arr = json_decode($response, true);
+        if (is_array($arr) && ($arr['code'] ?? null) == 0) {
+            if (!$this->verify($arr)) {
+                throw new RuntimeException('返回数据验签失败');
+            }
+            return $arr;
+        }
+        throw new RuntimeException(is_array($arr) ? ($arr['msg'] ?? '请求失败') : '请求失败');
+    }
+
+    /** 构造请求参数（追加 pid、timestamp、sign、sign_type） */
+    private function buildRequestParam($params)
+    {
+        $params['pid'] = $this->pid;
+        $params['timestamp'] = (string)time();
+        $params['sign'] = $this->rsaPrivateSign($this->getSignContent($params));
+        $params['sign_type'] = $this->signType;
+        return $params;
+    }
+
+    /** 验签（含时间戳校验，±300 秒） */
+    public function verify($arr)
+    {
+        if (empty($arr) || empty($arr['sign'])) {
+            return false;
+        }
+        if (empty($arr['timestamp']) || abs(time() - (int)$arr['timestamp']) > 300) {
+            return false;
+        }
+        $sign = (string)$arr['sign'];
+        return $this->rsaPublicVerify($this->getSignContent($arr), $sign);
+    }
+
+    /** 待签名字符串：剔除 sign/sign_type/空值/数组，按 key 升序 k=v&k=v 拼接 */
+    private function getSignContent($params)
+    {
+        ksort($params);
+        $signstr = '';
+        foreach ($params as $k => $v) {
+            if (is_array($v) || $this->isEmpty($v) || $k === 'sign' || $k === 'sign_type') {
+                continue;
+            }
+            $signstr .= '&' . $k . '=' . $v;
+        }
+        return substr($signstr, 1);
+    }
+
+    private function isEmpty($value)
+    {
+        return $value === null || trim((string)$value) === '';
+    }
+
+    /** 商户私钥签名（SHA256WithRSA，输出 base64） */
+    private function rsaPrivateSign($data)
+    {
+        $key = self::wrapKey($this->privateKey, 'PRIVATE KEY');
+        $privateKey = openssl_get_privatekey($key);
+        if (!$privateKey) {
+            throw new RuntimeException('签名失败：商户私钥错误');
+        }
+        openssl_sign($data, $sign, $privateKey, OPENSSL_ALGO_SHA256);
+        return base64_encode($sign);
+    }
+
+    /** 平台公钥验签（SHA256WithRSA） */
+    private function rsaPublicVerify($data, $sign)
+    {
+        $key = self::wrapKey($this->publicKey, 'PUBLIC KEY');
+        $publicKey = openssl_get_publickey($key);
+        if (!$publicKey) {
+            throw new RuntimeException('验签失败：平台公钥错误');
+        }
+        $result = openssl_verify($data, base64_decode($sign), $publicKey, OPENSSL_ALGO_SHA256);
+        return $result === 1;
+    }
+
+    /** 将纯 base64 密钥包装为 PEM 格式（兼容已带 PEM 头的输入） */
+    private static function wrapKey($key, $type)
+    {
+        $key = trim((string)$key);
+        if (stripos($key, '-----BEGIN') === 0) {
+            return $key;
+        }
+        $body = preg_replace('/\s+/', '', $key);
+        return "-----BEGIN {$type}-----\n"
+            . wordwrap($body, 64, "\n", true)
+            . "\n-----END {$type}-----";
     }
 
     private function siteUrl()

@@ -290,7 +290,7 @@ function admin_gen_cards()
 function admin_settings_get()
 {
     $keys = ['site_name', 'site_desc', 'announcement', 'parse_cost', 'register_points',
-             'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_key', 'epay_pay_types',
+             'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_public_key', 'epay_private_key', 'epay_pay_types',
                'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version'];
     $out = [];
     foreach ($keys as $k) {
@@ -306,7 +306,7 @@ function admin_settings_get()
 function admin_settings_save()
 {
     $fields = ['site_name', 'site_desc', 'announcement', 'parse_cost', 'register_points',
-               'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_key', 'epay_pay_types',
+               'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_public_key', 'epay_private_key', 'epay_pay_types',
              'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version'];
     // 数字字段必须为合法的非负整数
     $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'wechat_enabled'];
@@ -320,10 +320,6 @@ function admin_settings_save()
             continue;
         }
         $val = trim((string)$_POST[$k]);
-        // 支付密钥留空视为不修改，避免误清空
-        if ($k === 'epay_key' && $val === '') {
-            continue;
-        }
         set_setting($k, $val);
     }
     ok();

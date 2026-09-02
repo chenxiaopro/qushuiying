@@ -9,8 +9,6 @@
  *   POST parse         解析去水印（消耗点数）
  *   POST pay_create    创建充值订单（易支付）
  *   POST recharge_card 卡密充值
- *   GET  pay_notify    易支付异步通知（需在支付平台配置）
- *   GET  pay_return    易支付同步跳转
  */
 
 require_once __DIR__ . '/../app/init.php';
@@ -19,7 +17,7 @@ require_once __DIR__ . '/../app/payment/Epay.php';
 
 try {
     $action = input('action', '');
-    $csrfSkip = ['pay_notify', 'pay_return', 'me', 'parse_types'];
+    $csrfSkip = ['me', 'parse_types'];
     $needCsrf = !in_array($action, $csrfSkip, true)
         && $_SERVER['REQUEST_METHOD'] !== 'GET';
     if ($needCsrf) {
@@ -52,12 +50,6 @@ try {
             break;
         case 'recharge_card':
             api_recharge_card();
-            break;
-        case 'pay_notify':
-            api_pay_notify();
-            break;
-        case 'pay_return':
-            api_pay_return();
             break;
         default:
             fail('未知操作', 404);
@@ -256,7 +248,7 @@ function api_pay_create()
         $orderSn, $u['id'], $money, $points, $type,
     ]);
 
-    $epay = new Epay(setting('epay_api'), setting('epay_pid'), setting('epay_key'));
+    $epay = new Epay(setting('epay_api'), setting('epay_pid'), setting('epay_public_key'), setting('epay_private_key'));
     $url = $epay->submitUrl($orderSn, $money, $type, setting('site_name', '点数充值') . '-' . $points . '点');
     ok(['order_sn' => $orderSn, 'pay_url' => $url, 'money' => $money, 'points' => $points]);
 }
@@ -289,46 +281,3 @@ function api_recharge_card()
     }
 }
 
-function api_pay_notify()
-{
-    if (!Epay::enabled()) {
-        exit('fail');
-    }
-    $epay = new Epay(setting('epay_api'), setting('epay_pid'), setting('epay_key'));
-    $info = $epay->verifyNotify($_REQUEST);
-    if (!$info) {
-        exit('fail');
-    }
-
-    $order = DB::one('SELECT * FROM orders WHERE order_sn=?', [$info['order_sn']]);
-    if (!$order) {
-        exit('fail');
-    }
-    if ((int)$order['status'] === 0 && $info['trade_status'] === 'TRADE_SUCCESS') {
-        DB::pdo()->beginTransaction();
-        try {
-            $locked = DB::one('SELECT * FROM orders WHERE id=? FOR UPDATE', [$order['id']]);
-            if ((int)$locked['status'] === 0) {
-                DB::execute('UPDATE orders SET status=1, trade_no=?, paid_at=NOW() WHERE id=?', [$info['trade_no'], $order['id']]);
-                add_points($order['user_id'], (int)$order['points']);
-            }
-            DB::pdo()->commit();
-        } catch (Throwable $e) {
-            if (DB::pdo()->inTransaction()) {
-                DB::pdo()->rollBack();
-            }
-            throw $e;
-        }
-    }
-    exit('success');
-}
-
-function api_pay_return()
-{
-    $orderSn = input('out_trade_no', '');
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-    $url = cfg('site_url') ?: (($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1'));
-    header('Location: ' . $url . '/?paid=' . urlencode($orderSn));
-    exit;
-}
