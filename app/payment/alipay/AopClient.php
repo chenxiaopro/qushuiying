@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/AopEncrypt.php';
+require_once __DIR__ . '/SignData.php';
 
 class AopClient {
 	//应用ID

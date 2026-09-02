@@ -25,6 +25,7 @@ try {
     if (!$order) {
         exit('fail');
     }
+    $paid = false;
     if ((int)$order['status'] === 0) {
         DB::pdo()->beginTransaction();
         try {
@@ -32,6 +33,7 @@ try {
             if ((int)$locked['status'] === 0) {
                 DB::execute('UPDATE orders SET status=1, trade_no=?, paid_at=NOW() WHERE id=?', [$info['trade_no'], $order['id']]);
                 add_points($order['user_id'], (int)$order['points']);
+                $paid = true;
             }
             DB::pdo()->commit();
         } catch (Throwable $e) {
@@ -40,6 +42,10 @@ try {
             }
             throw $e;
         }
+    }
+    if ($paid) {
+        $user = DB::one('SELECT username FROM users WHERE id=?', [$order['user_id']]);
+        NotifyBark::recharge($user ? $user['username'] : ('#' . $order['user_id']), $order['amount'], $order['points']);
     }
     exit('success');
 } catch (Throwable $e) {

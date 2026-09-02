@@ -291,11 +291,48 @@ require_once __DIR__ . '/../../app/init.php';
           </div>
         </div>
         <button class="btn btn-primary" id="saveAlipayBtn" style="margin-top:16px">保存支付宝配置</button>
-        <div class="page-title" style="margin-top:18px">支付回调说明</div>
+          <div class="page-title" style="margin-top:18px">支付回调说明</div>
         <p style="font-size:13px;color:#8a90a3">
           系统会在下单时自动使用「异步通知地址」：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/alipay_notify.php') ?></code><br>
           请在支付宝开放平台开通「当面付」产品，确保应用已上线，并在应用设置中配置好「接口加签方式」（RSA2）。
         </p>
+      </div>
+
+      <div class="page-title">Bark 通知配置</div>
+      <div class="card">
+        <div class="page-sub" style="margin-bottom:14px">通过 Bark 向管理员推送「用户注册」「用户充值」通知。服务器地址留空使用官方 <code>https://api.day.app</code>。</div>
+        <div class="form-grid">
+          <div>
+            <label>通知总开关</label>
+            <select class="field" id="set_bark_enabled">
+              <option value="0">关闭</option>
+              <option value="1">开启</option>
+            </select>
+          </div>
+          <div>
+            <label>Bark 服务器地址</label>
+            <input class="field" id="set_bark_server" placeholder="https://api.day.app">
+          </div>
+          <div>
+            <label>推送 Key</label>
+            <input class="field" id="set_bark_key" placeholder="Bark App 中的推送 Key">
+          </div>
+          <div>
+            <label>用户注册通知</label>
+            <select class="field" id="set_bark_notify_register">
+              <option value="0">关闭</option>
+              <option value="1">开启</option>
+            </select>
+          </div>
+          <div>
+            <label>用户充值通知</label>
+            <select class="field" id="set_bark_notify_recharge">
+              <option value="0">关闭</option>
+              <option value="1">开启</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="saveBarkBtn" style="margin-top:16px">保存 Bark 配置</button>
       </div>
     </div>
   </main>
@@ -440,6 +477,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260902c"></script>
+<script src="../assets/js/admin.js?v=20260902d"></script>
 </body>
 </html>

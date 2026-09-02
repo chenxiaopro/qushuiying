@@ -16,7 +16,7 @@ $wechatQrcode = trim(setting('wechat_qrcode', ''));
 $wechatDesc = trim(setting('wechat_desc', ''));
 $parseCost = (int)setting('parse_cost', 1);
 $registerPoints = (int)setting('register_points', 0);
-$siteVersion = trim(setting('site_version', 'v1.1.0'));
+$siteVersion = trim(setting('site_version', 'v1.2.0'));
 $payTypes = Epay::payTypes();
 $payEnabled = Epay::enabled();
 $alipayEnabled = AlipayF2F::enabled();
@@ -274,6 +274,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260902c"></script>
+<script src="assets/js/app.js?v=20260902d"></script>
 </body>
 </html>

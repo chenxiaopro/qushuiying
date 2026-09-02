@@ -83,6 +83,7 @@ function api_register()
     DB::execute('INSERT INTO users(username,password,points,total_points,status) VALUES(?,?,?,?,1)', [
         $username, password_hash($password, PASSWORD_DEFAULT), $registerPoints, $registerPoints,
     ]);
+    NotifyBark::register($username);
     ok(['username' => $username, 'register_points' => $registerPoints, 'msg' => '注册成功']);
 }
 
