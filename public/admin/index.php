@@ -46,7 +46,6 @@ require_once __DIR__ . '/../../app/init.php';
     </nav>
     <nav class="nav-group">
       <div class="nav-title">系统</div>
-      <div class="nav-item" data-page="versions">版本管理</div>
       <div class="nav-item" data-page="settings">站点设置</div>
     </nav>
     <div class="logout" id="adminLogout">退出登录</div>
@@ -150,20 +149,6 @@ require_once __DIR__ . '/../../app/init.php';
       </div>
     </div>
 
-    <!-- 版本管理 -->
-    <div class="page hide" data-name="versions">
-      <div class="page-head">
-        <div>
-          <div class="page-title" style="margin-bottom:4px">版本管理</div>
-          <div class="page-sub">管理版本更新记录，前台页脚展示当前版本号</div>
-        </div>
-        <button class="btn btn-primary" id="verAddBtn">新增版本</button>
-      </div>
-      <div class="card">
-        <div id="versionsTable"></div>
-      </div>
-    </div>
-
     <!-- 设置 -->
     <div class="page hide" data-name="settings">
       <div class="page-title">站点设置</div>
@@ -178,8 +163,8 @@ require_once __DIR__ . '/../../app/init.php';
             <input class="field" id="set_site_desc">
           </div>
           <div>
-            <label>当前版本号</label>
-            <input class="field" id="set_site_version" placeholder="如：v1.0.0">
+            <label>当前版本号（自动生成）</label>
+            <input class="field" id="set_site_version" readonly placeholder="自动生成">
           </div>
           <div>
             <label>公告</label>
@@ -318,6 +303,10 @@ require_once __DIR__ . '/../../app/init.php';
             <input class="field" id="set_bark_key" placeholder="Bark App 中的推送 Key">
           </div>
           <div>
+            <label>铃声（可选）</label>
+            <input class="field" id="set_bark_sound" placeholder="如：alarm、minute、payments，留空用默认铃声">
+          </div>
+          <div>
             <label>用户注册通知</label>
             <select class="field" id="set_bark_notify_register">
               <option value="0">关闭</option>
@@ -373,37 +362,6 @@ require_once __DIR__ . '/../../app/init.php';
       </div>
     </div>
     <button class="btn btn-primary btn-block" id="ptSaveBtn" style="margin-top:18px">保存</button>
-  </div>
-</div>
-
-<!-- 版本编辑弹窗 -->
-<div class="modal-mask hide" id="verModal">
-  <div class="modal">
-    <div class="modal-title" id="verModalTitle">新增版本</div>
-    <input type="hidden" id="verId">
-    <div class="form-grid">
-      <div>
-        <label>版本号</label>
-        <input class="field" id="verVersion" placeholder="如：v1.0.0">
-      </div>
-      <div>
-        <label>类型</label>
-        <select class="field" id="verType">
-          <option value="update">更新</option>
-          <option value="optimize">优化</option>
-          <option value="fix">修复</option>
-        </select>
-      </div>
-      <div class="form-grid-full">
-        <label>更新标题</label>
-        <input class="field" id="verTitle" placeholder="如：新增公众号弹窗引导">
-      </div>
-      <div class="form-grid-full">
-        <label>更新内容</label>
-        <textarea class="field" id="verContent" rows="3" placeholder="详细更新说明（可选）"></textarea>
-      </div>
-    </div>
-    <button class="btn btn-primary btn-block" id="verSaveBtn" style="margin-top:18px">保存</button>
   </div>
 </div>
 
@@ -477,6 +435,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260902d"></script>
+<script src="../assets/js/admin.js?v=20260902e"></script>
 </body>
 </html>

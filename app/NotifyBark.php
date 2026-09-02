@@ -17,13 +17,18 @@ class NotifyBark
         if ($server === '' || $key === '') {
             return false;
         }
+        $data = [
+            'device_key' => $key,
+            'title'       => $title,
+            'body'        => $body,
+            'level'       => 'active',
+        ];
+        $sound = trim((string)setting('bark_sound', ''));
+        if ($sound !== '') {
+            $data['sound'] = $sound;
+        }
         try {
-            $resp = http_post($server . '/push', [
-                'device_key' => $key,
-                'title'       => $title,
-                'body'        => $body,
-                'level'       => 'active',
-            ], [], 10, true);
+            $resp = http_post($server . '/push', $data, [], 10, true);
             return $resp !== false;
         } catch (Throwable $e) {
             error_log('[wm-bark] ' . $e->getMessage());

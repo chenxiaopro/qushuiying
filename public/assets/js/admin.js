@@ -86,7 +86,6 @@
     if (name === 'cards') loadCards(1);
     if (name === 'apis') loadApis(1);
     if (name === 'parseTypes') loadParseTypes();
-    if (name === 'versions') loadVersions();
     if (name === 'settings') loadSettings();
   }
 
@@ -217,7 +216,7 @@
       if (!d.list.length) { $('ordersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
       else {
         var sMap = ['<span class="badge-wait">待支付</span>', '<span class="badge-ok">已支付</span>', '<span class="badge-off">已关闭</span>'];
-        var tMap = { alipay: '支付宝', wxpay: '微信' };
+        var tMap = { alipay: '支付宝', alipay_f2f: '支付宝当面付', wxpay: '微信' };
         $('ordersTable').innerHTML =
           '<div class="table-wrap"><table><thead><tr><th>订单号</th><th>用户</th><th>金额</th><th>点数</th><th>方式</th><th>状态</th><th>支付时间</th><th>创建时间</th></tr></thead><tbody>' +
           d.list.map(function (o) {
@@ -328,6 +327,7 @@
       $('set_bark_enabled').value = d.bark_enabled;
       $('set_bark_server').value = d.bark_server;
       $('set_bark_key').value = d.bark_key;
+      $('set_bark_sound').value = d.bark_sound;
       $('set_bark_notify_register').value = d.bark_notify_register;
       $('set_bark_notify_recharge').value = d.bark_notify_recharge;
     });
@@ -340,7 +340,7 @@
   }
   $('saveSettingsBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
-      ['site_name', 'site_desc', 'announcement', 'parse_cost', 'register_points', 'points_per_yuan', 'site_version']
+      ['site_name', 'site_desc', 'announcement', 'parse_cost', 'register_points', 'points_per_yuan']
     )).then(function (res) {
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
@@ -376,7 +376,7 @@
   });
   $('saveBarkBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
-      ['bark_enabled', 'bark_server', 'bark_key', 'bark_notify_register', 'bark_notify_recharge']
+      ['bark_enabled', 'bark_server', 'bark_key', 'bark_sound', 'bark_notify_register', 'bark_notify_recharge']
     )).then(function (res) {
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
@@ -497,87 +497,6 @@
     });
   });
   $('ptModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
-
-  /* ---------- 版本管理 ---------- */
-  var versionsDataCache = {};
-
-  function verTypeName(t) {
-    return { update: '更新', optimize: '优化', fix: '修复' }[t] || '更新';
-  }
-
-  function loadVersions() {
-    adminApi('versions').then(function (res) {
-      if (!checkAuth(res)) return;
-      var d = res.data;
-      versionsDataCache = {};
-      d.list.forEach(function (v) { versionsDataCache[v.id] = v; });
-      if (!d.list.length) { $('versionsTable').innerHTML = '<p style="color:#8a90a3">暂无版本记录</p>'; }
-      else {
-        $('versionsTable').innerHTML =
-          '<div class="table-wrap"><table><thead><tr><th>ID</th><th>版本号</th><th>类型</th><th>标题</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
-          d.list.map(function (v) {
-            return '<tr>' +
-              '<td>' + v.id + '</td>' +
-              '<td><code>' + esc(v.version) + '</code></td>' +
-              '<td>' + esc(verTypeName(v.type)) + '</td>' +
-              '<td>' + esc(v.title) + '</td>' +
-              '<td>' + esc(v.created_at) + '</td>' +
-              '<td>' +
-                '<button class="btn btn-sm" data-ver-edit="' + v.id + '">编辑</button> ' +
-                '<button class="btn btn-sm btn-danger" data-ver-del="' + v.id + '">删除</button>' +
-              '</td></tr>';
-          }).join('') + '</tbody></table></div>';
-        bindVersionActions();
-      }
-    });
-  }
-
-  function bindVersionActions() {
-    document.querySelectorAll('[data-ver-edit]').forEach(function (b) {
-      b.addEventListener('click', function () { openVerModal(b.getAttribute('data-ver-edit')); });
-    });
-    document.querySelectorAll('[data-ver-del]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (!confirm('确定删除该版本记录吗？')) return;
-        adminApi('version_delete', { id: b.getAttribute('data-ver-del') }).then(function (res) {
-          if (!checkAuth(res)) return;
-          toast('已删除');
-          loadVersions();
-        });
-      });
-    });
-  }
-
-  function openVerModal(id) {
-    $('verModalTitle').textContent = id ? '编辑版本' : '新增版本';
-    var v = id ? versionsDataCache[id] : null;
-    $('verId').value = id || '';
-    $('verVersion').value = v ? v.version : '';
-    $('verType').value = v ? v.type : 'update';
-    $('verTitle').value = v ? v.title : '';
-    $('verContent').value = v ? v.content : '';
-    $('verModal').classList.remove('hide');
-  }
-
-  $('verAddBtn').addEventListener('click', function () { openVerModal(null); });
-  $('verSaveBtn').addEventListener('click', function () {
-    var id = $('verId').value;
-    var params = {
-      id: id,
-      version: $('verVersion').value.trim(),
-      type: $('verType').value,
-      title: $('verTitle').value.trim(),
-      content: $('verContent').value.trim()
-    };
-    adminApi('version_save', params).then(function (res) {
-      if (!checkAuth(res)) return;
-      if (res.code !== 0) { toast(res.msg); return; }
-      $('verModal').classList.add('hide');
-      toast('已保存');
-      loadVersions();
-    });
-  });
-  $('verModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
 
   /* ---------- 接口管理 ---------- */
   function loadApis(page, q) {

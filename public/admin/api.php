@@ -100,18 +100,6 @@ try {
             require_admin();
             admin_parse_type_toggle();
             break;
-        case 'versions':
-            require_admin();
-            admin_versions();
-            break;
-        case 'version_save':
-            require_admin();
-            admin_version_save();
-            break;
-        case 'version_delete':
-            require_admin();
-            admin_version_delete();
-            break;
         case 'me':
             $a = current_admin();
             if (!$a) {
@@ -293,7 +281,7 @@ function admin_settings_get()
              'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_public_key', 'epay_private_key', 'epay_pay_types',
              'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
                'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version',
-               'bark_enabled', 'bark_server', 'bark_key', 'bark_notify_register', 'bark_notify_recharge'];
+               'bark_enabled', 'bark_server', 'bark_key', 'bark_sound', 'bark_notify_register', 'bark_notify_recharge'];
     $out = [];
     foreach ($keys as $k) {
         $out[$k] = setting($k);
@@ -312,8 +300,8 @@ function admin_settings_save()
     $fields = ['site_name', 'site_desc', 'announcement', 'parse_cost', 'register_points',
                'points_per_yuan', 'epay_enabled', 'epay_api', 'epay_pid', 'epay_public_key', 'epay_private_key', 'epay_pay_types',
              'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
-             'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version',
-             'bark_enabled', 'bark_server', 'bark_key', 'bark_notify_register', 'bark_notify_recharge'];
+             'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc',
+             'bark_enabled', 'bark_server', 'bark_key', 'bark_sound', 'bark_notify_register', 'bark_notify_recharge'];
     // 数字字段必须为合法的非负整数
     $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'alipay_enabled', 'wechat_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge'];
     foreach ($intFields as $k) {
@@ -489,51 +477,4 @@ function admin_parse_type_toggle()
     }
     DB::execute('UPDATE parse_types SET enabled=? WHERE id=?', [$enabled, $id]);
     ok(['enabled' => $enabled]);
-}
-
-function admin_versions()
-{
-    $rows = DB::all('SELECT * FROM versions ORDER BY id DESC');
-    ok(['list' => $rows]);
-}
-
-function admin_version_save()
-{
-    $id = (int)input('id', 0);
-    $version = trim((string)input('version', ''));
-    $title = trim((string)input('title', ''));
-    $type = trim((string)input('type', 'update'));
-    $content = trim((string)input('content', ''));
-
-    if ($version === '') {
-        fail('版本号不能为空');
-    }
-    if ($title === '') {
-        fail('更新标题不能为空');
-    }
-    if (!in_array($type, ['update', 'optimize', 'fix'], true)) {
-        $type = 'update';
-    }
-
-    if ($id > 0) {
-        $row = DB::one('SELECT id FROM versions WHERE id=?', [$id]);
-        if (!$row) {
-            fail('版本记录不存在');
-        }
-        DB::execute('UPDATE versions SET version=?,title=?,type=?,content=? WHERE id=?', [$version, $title, $type, $content, $id]);
-    } else {
-        DB::execute('INSERT INTO versions(version,title,type,content,created_at) VALUES(?,?,?,?,NOW())', [$version, $title, $type, $content]);
-    }
-    ok(['id' => $id > 0 ? $id : (int)DB::lastId()]);
-}
-
-function admin_version_delete()
-{
-    $id = (int)input('id', 0);
-    $row = DB::one('SELECT id FROM versions WHERE id=?', [$id]);
-    if (!$row) {
-        fail('版本记录不存在');
-    }
-    DB::execute('DELETE FROM versions WHERE id=?', [$id]);
-    ok();
 }
