@@ -62,35 +62,52 @@ class Epay
             'return_url'   => $returnUrl,
             'name'         => $name,
             'money'        => sprintf('%.2f', $money),
-            'sign'         => $this->signSubmit($orderSn, $money, $type, $name),
-            'sign_type'    => 'MD5',
         ];
+        $params['sign'] = $this->sign($params);
+        $params['sign_type'] = 'MD5';
         return $this->api . '/submit.php?' . http_build_query($params);
     }
 
-    /** 提交签名：md5(pid + out_trade_no + amount + type + name + key) */
-    private function signSubmit($orderSn, $money, $type, $name)
+    /** 彩虹易支付标准签名：参数按 key 升序拼接后附商户密钥，md5 大写 */
+    private function sign(array $params)
     {
-        $str = $this->pid . $orderSn . sprintf('%.2f', $money) . $type . $name . $this->key;
-        return md5($str);
+        $params = array_filter($params, function ($k) {
+            return $k !== 'sign' && $k !== 'sign_type';
+        }, ARRAY_FILTER_USE_KEY);
+        $params['key'] = $this->key;
+        ksort($params);
+        $pairs = [];
+        foreach ($params as $k => $v) {
+            if ($v === '' || $v === null) {
+                continue;
+            }
+            $pairs[] = $k . '=' . $v;
+        }
+        return strtoupper(md5(implode('&', $pairs)));
     }
 
     /** 校验异步通知，成功返回 ['order_sn','money','type','trade_no','trade_status']，失败返回 null */
     public function verifyNotify($data)
     {
         $sign = $data['sign'] ?? '';
-        $type = $data['type'] ?? '';
         $pid = $data['pid'] ?? '';
         $tradeNo = $data['trade_no'] ?? '';
         $orderSn = $data['out_trade_no'] ?? '';
+        $type = $data['type'] ?? '';
         $money = $data['money'] ?? '';
 
         if ($pid !== $this->pid) {
             return null;
         }
-        // 通知签名：md5(pid + trade_no + out_trade_no + type + money + key)
-        $str = $this->pid . $tradeNo . $orderSn . $type . sprintf('%.2f', $money) . $this->key;
-        if (strtoupper(md5($str)) !== strtoupper($sign)) {
+        $allowed = ['pid', 'trade_no', 'out_trade_no', 'type', 'name', 'money', 'trade_status', 'param'];
+        $clean = [];
+        foreach ($allowed as $k) {
+            if (array_key_exists($k, $data)) {
+                $clean[$k] = $data[$k];
+            }
+        }
+        $expected = $this->sign($clean);
+        if (strtoupper((string)$sign) !== $expected) {
             return null;
         }
         return [

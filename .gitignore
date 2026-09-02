@@ -1,3 +1,4 @@
 # 本地部署配置（含数据库密码），不要提交
 app/config.local.php
+pay/app/config.local.php
 .monkeycode-tmp-files/
