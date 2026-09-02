@@ -274,6 +274,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260902"></script>
+<script src="assets/js/app.js?v=20260902a"></script>
 </body>
 </html>

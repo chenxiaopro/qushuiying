@@ -297,9 +297,11 @@ function admin_settings_get()
     foreach ($keys as $k) {
         $out[$k] = setting($k);
     }
-    // 公众号弹窗开关默认关闭，避免旧库无此 key 时下拉未选中
-    if ($out['wechat_enabled'] === '' || $out['wechat_enabled'] === null) {
-        $out['wechat_enabled'] = '0';
+    // 开关类字段默认关闭，避免旧库无此 key 时下拉未选中导致保存校验失败
+    foreach (['wechat_enabled', 'epay_enabled', 'alipay_enabled'] as $switchKey) {
+        if ($out[$switchKey] === '' || $out[$switchKey] === null) {
+            $out[$switchKey] = '0';
+        }
     }
     ok($out);
 }

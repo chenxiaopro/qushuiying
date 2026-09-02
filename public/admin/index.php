@@ -440,6 +440,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260902"></script>
+<script src="../assets/js/admin.js?v=20260902a"></script>
 </body>
 </html>
