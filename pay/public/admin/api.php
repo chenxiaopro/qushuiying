@@ -59,14 +59,18 @@ try {
             p_csrf_check();
             $id = (int)p_input('id', 0);
             $name = trim((string)p_input('name', ''));
+            $status = (int)p_input('status', 1);
+            if ($id > 0) {
+                $exist = PDB::one('SELECT name FROM pay_merchants WHERE id=?', [$id]);
+                if (!$exist) {
+                    p_fail('商户不存在', 404);
+                }
+                $finalName = $name !== '' ? $name : $exist['name'];
+                PDB::execute('UPDATE pay_merchants SET name=?, status=? WHERE id=?', [$finalName, $status, $id]);
+                p_ok(['id' => $id]);
+            }
             if ($name === '') {
                 p_fail('商户名称不能为空');
-            }
-            if ($id > 0) {
-                PDB::execute('UPDATE pay_merchants SET name=?, status=? WHERE id=?', [
-                    $name, (int)p_input('status', 1), $id,
-                ]);
-                p_ok(['id' => $id]);
             }
             $pid = p_gen_pid();
             $secret = bin2hex(random_bytes(16));

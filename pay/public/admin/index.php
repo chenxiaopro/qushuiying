@@ -133,11 +133,12 @@ var CSRF = '<?php echo htmlspecialchars(p_csrf_token(), ENT_QUOTES); ?>';
 var CHANNEL_OPTIONS = [];
 
 function api(action, data, isJson){
-  if (data && action !== 'login') data.csrf = CSRF;
+  data = data || {};
+  if (action !== 'login') data.csrf = CSRF;
   var body;
   var headers = {};
   if (isJson) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(data); }
-  else { body = Object.keys(data||{}).map(function(k){ return k + '=' + encodeURIComponent(data[k]); }).join('&'); }
+  else { headers['Content-Type'] = 'application/x-www-form-urlencoded'; body = Object.keys(data).map(function(k){ return k + '=' + encodeURIComponent(data[k]); }).join('&'); }
   if (action) body = (body ? 'action=' + action + '&' + body : 'action=' + action);
   return fetch('?', {method:'POST', headers:headers, body:body}).then(function(r){return r.json();});
 }
