@@ -143,6 +143,8 @@ require_once __DIR__ . '/../../app/init.php';
           <input class="field" id="genCount" type="number" value="10" min="1" max="500" style="width:90px" title="生成数量">
           <input class="field" id="genPoints" type="number" value="10" min="1" style="width:120px" title="每张卡点数">
           <button class="btn btn-primary" id="genCardsBtn">批量生成</button>
+          <button class="btn" id="copyCardsBtn" type="button">复制未使用卡密</button>
+          <button class="btn" id="exportCardsBtn" type="button">导出未使用卡密</button>
         </div>
         <div id="cardsTable"></div>
         <div class="pager" id="cardsPager"></div>

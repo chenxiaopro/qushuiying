@@ -120,6 +120,18 @@ function gen_card()
     return strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 16));
 }
 
+/** 清理过期未支付订单（超过 1 天未支付，不影响已支付/已关闭） */
+function cleanup_expired_orders()
+{
+    DB::execute('DELETE FROM orders WHERE status=0 AND created_at < (NOW() - INTERVAL 1 DAY)');
+}
+
+/** 清理过期未使用卡密（超过 7 天未使用，不影响已使用） */
+function cleanup_expired_cards()
+{
+    DB::execute('DELETE FROM cards WHERE status=0 AND created_at < (NOW() - INTERVAL 7 DAY)');
+}
+
 /** 简单文本脱敏显示 */
 function mask_str($s, $head = 2, $tail = 2)
 {

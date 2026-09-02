@@ -60,6 +60,10 @@ try {
             require_admin();
             admin_gen_cards();
             break;
+        case 'cards_export':
+            require_admin();
+            admin_cards_export();
+            break;
         case 'settings':
             require_admin();
             admin_settings_get();
@@ -215,6 +219,7 @@ function admin_user_action()
 
 function admin_orders()
 {
+    cleanup_expired_orders();
     $page = max(1, (int)input('page', 1));
     $status = input('status', '');
     $where = '';
@@ -250,6 +255,7 @@ function admin_logs()
 
 function admin_cards()
 {
+    cleanup_expired_cards();
     $page = max(1, (int)input('page', 1));
     $total = (int)DB::scalar('SELECT COUNT(*) FROM cards');
     $pageSize = 20;
@@ -264,6 +270,7 @@ function admin_cards()
 
 function admin_gen_cards()
 {
+    cleanup_expired_cards();
     $count = max(1, min(500, (int)input('count', 10)));
     $points = max(1, (int)input('points', 10));
     $cards = [];
@@ -273,6 +280,13 @@ function admin_gen_cards()
         $cards[] = $no;
     }
     ok(['cards' => $cards, 'count' => $count, 'points' => $points]);
+}
+
+function admin_cards_export()
+{
+    cleanup_expired_cards();
+    $rows = DB::all('SELECT card_no,points FROM cards WHERE status=0 ORDER BY id ASC');
+    ok(['cards' => $rows, 'count' => count($rows)]);
 }
 
 function admin_settings_get()

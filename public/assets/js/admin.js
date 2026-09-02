@@ -298,6 +298,70 @@
     });
   });
 
+  function fetchUnusedCards() {
+    return adminApi('cards_export').then(function (res) {
+      if (!checkAuth(res)) return null;
+      if (res.code !== 0) { toast(res.msg); return null; }
+      return res.data;
+    });
+  }
+
+  $('copyCardsBtn').addEventListener('click', function () {
+    fetchUnusedCards().then(function (d) {
+      if (!d) return;
+      if (!d.cards.length) { toast('暂无未使用卡密'); return; }
+      var text = d.cards.map(function (c) { return c.card_no; }).join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          toast('已复制 ' + d.count + ' 张卡密');
+        }).catch(function () {
+          copyFallback(text, function () { toast('已复制 ' + d.count + ' 张卡密'); });
+        });
+      } else {
+        copyFallback(text, function () { toast('已复制 ' + d.count + ' 张卡密'); });
+      }
+    });
+  });
+
+  $('exportCardsBtn').addEventListener('click', function () {
+    fetchUnusedCards().then(function (d) {
+      if (!d) return;
+      if (!d.cards.length) { toast('暂无未使用卡密'); return; }
+      var csv = '卡密,点数\n' + d.cards.map(function (c) { return c.card_no + ',' + c.points; }).join('\n');
+      var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '卡密_' + timestamp() + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      toast('已导出 ' + d.count + ' 张卡密');
+    });
+  });
+
+  function copyFallback(text, ok) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      ok();
+    } catch (e) {
+      toast('复制失败，请手动选择复制');
+    }
+    document.body.removeChild(ta);
+  }
+
+  function timestamp() {
+    var d = new Date();
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
+  }
+
   /* ---------- 设置 ---------- */
   function loadSettings() {
     adminApi('settings').then(function (res) {
