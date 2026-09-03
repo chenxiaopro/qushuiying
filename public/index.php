@@ -16,7 +16,7 @@ $wechatQrcode = trim(setting('wechat_qrcode', ''));
 $wechatDesc = trim(setting('wechat_desc', ''));
 $parseCost = (int)setting('parse_cost', 1);
 $registerPoints = (int)setting('register_points', 0);
-$siteVersion = trim(setting('site_version', 'v1.2.0'));
+$siteVersion = trim(setting('site_version', ''));
 $payTypes = Epay::payTypes();
 $payEnabled = Epay::enabled();
 $alipayEnabled = AlipayF2F::enabled();
@@ -101,7 +101,7 @@ $csrf = csrf_token();
         <div class="feature-icon">3</div>
         <div class="feature-text">
           <b>点数付费</b>
-          <span>卡密充值<?= $payEnabled ? ' + 在线支付' : '' ?>，解析成功后再扣点</span>
+          <span>卡密充值<?= $onlinePayEnabled ? ' + 在线支付' : '' ?>，解析成功后再扣点</span>
         </div>
       </div>
     </div>

@@ -61,28 +61,14 @@ class DB
             // 忽略
         }
         try {
-            $tables = self::$pdo->query("SHOW TABLES LIKE 'versions'")->fetchAll();
-            if (!$tables) {
-                self::$pdo->exec("CREATE TABLE `versions` (
-                    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    `version` VARCHAR(20) NOT NULL COMMENT '版本号',
-                    `title` VARCHAR(100) NOT NULL COMMENT '更新标题',
-                    `type` VARCHAR(20) NOT NULL DEFAULT 'update' COMMENT '类型:update更新/optimize优化/fix修复',
-                    `content` TEXT NULL COMMENT '更新内容',
-                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (`id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本更新记录'");
-            }
-        } catch (Throwable $e) {
-            // 忽略
-        }
-        try {
+            $ver = date('Y-m.d-H:i');
             self::$pdo->exec("INSERT IGNORE INTO `settings` (`k`,`v`) VALUES
-                ('wechat_enabled','0'),('wechat_name',''),('wechat_qrcode',''),('wechat_desc',''),('site_version','v1.2.0'),
+                ('wechat_enabled','0'),('wechat_name',''),('wechat_qrcode',''),('wechat_desc',''),
+                ('site_version'," . self::$pdo->quote($ver) . "),
                 ('epay_public_key',''),('epay_private_key',''),
                 ('alipay_enabled','0'),('alipay_app_id',''),('alipay_private_key',''),('alipay_public_key',''),
-                ('bark_enabled','0'),('bark_server','https://api.day.app'),('bark_key',''),('bark_notify_register','0'),('bark_notify_recharge','0')");
-            self::$pdo->exec("UPDATE `settings` SET `v`='v1.2.0' WHERE `k`='site_version' AND `v`='v1.1.0'");
+                ('bark_enabled','0'),('bark_server','https://api.day.app'),('bark_key',''),('bark_notify_register','0'),('bark_notify_recharge','0'),('bark_sound','')");
+            self::$pdo->exec("UPDATE `settings` SET `v`=" . self::$pdo->quote($ver) . " WHERE `k`='site_version' AND (`v`='' OR `v` LIKE 'v%')");
         } catch (Throwable $e) {
             // 忽略
         }

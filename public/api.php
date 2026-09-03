@@ -233,6 +233,7 @@ function api_parse()
 function api_pay_create()
 {
     $u = require_login();
+    cleanup_expired_orders();
 
     $type = input('type', 'alipay');
     $subject = setting('site_name', '点数充值');
@@ -300,6 +301,7 @@ function api_pay_query()
 function api_recharge_card()
 {
     $u = require_login();
+    cleanup_expired_cards();
     $cardNo = strtoupper(trim((string)input('card', '')));
     if (!preg_match('/^[A-Z0-9]{8,32}$/', $cardNo)) {
         fail('卡密格式不正确');

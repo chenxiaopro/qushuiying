@@ -103,16 +103,6 @@ CREATE TABLE IF NOT EXISTS `parse_types` (
   UNIQUE KEY `uk_key` (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='解析类型表';
 
-CREATE TABLE IF NOT EXISTS `versions` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `version` VARCHAR(20) NOT NULL COMMENT '版本号',
-  `title` VARCHAR(100) NOT NULL COMMENT '更新标题',
-  `type` VARCHAR(20) NOT NULL DEFAULT 'update' COMMENT '类型:update更新/optimize优化/fix修复',
-  `content` TEXT NULL COMMENT '更新内容',
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本更新记录';
-
 CREATE TABLE IF NOT EXISTS `settings` (
   `k` VARCHAR(64) NOT NULL,
   `v` TEXT NULL,
@@ -146,7 +136,8 @@ INSERT INTO `settings` (`k`, `v`) VALUES
 ('bark_key', ''),
 ('bark_notify_register', '0'),
 ('bark_notify_recharge', '0'),
-('site_version', 'v1.2.0')
+('bark_sound', ''),
+('site_version', DATE_FORMAT(NOW(), '%Y-%m.%d-%H:%i'))
 ON DUPLICATE KEY UPDATE `k`=`k`;
 
 -- 默认解析类型
