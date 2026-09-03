@@ -3,6 +3,29 @@
  * 通用函数
  */
 
+/** 解析语义化版本号，返回 [major, minor, patch] */
+function parse_semver($v)
+{
+    $v = ltrim(trim((string)$v), 'vV');
+    if (!preg_match('/^(\d+)\.(\d+)\.(\d+)/', $v, $m)) {
+        return [1, 0, 0];
+    }
+    return [(int)$m[1], (int)$m[2], (int)$m[3]];
+}
+
+/** 按更新类型递增版本号：更新=次版本，优化/修复=修订号 */
+function bump_semver($current, $type = 'update')
+{
+    [$maj, $min, $pat] = parse_semver($current);
+    if ($type === 'update') {
+        $min++;
+        $pat = 0;
+    } else {
+        $pat++;
+    }
+    return 'v' . $maj . '.' . $min . '.' . $pat;
+}
+
 /** JSON 输出并结束 */
 function json_out($data, $code = 200)
 {
