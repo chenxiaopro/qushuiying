@@ -74,7 +74,6 @@ class DB
                     KEY `idx_version` (`version`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本更新记录'");
             }
-            // 无任何版本记录时，写入一条当前版本的默认记录
             $cnt = (int)self::$pdo->query("SELECT COUNT(*) FROM `versions`")->fetchColumn();
             if ($cnt === 0) {
                 $ver = (string)cfg('app_version', 'v1.3.0');

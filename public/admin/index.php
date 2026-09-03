@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../app/init.php';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>后台管理 - <?= htmlspecialchars(setting('site_name', '短视频去水印')) ?></title>
-<link rel="stylesheet" href="../assets/css/admin.css?v=20260902">
+<link rel="stylesheet" href="../assets/css/admin.css?v=20260903a">
 </head>
 <body>
 
@@ -157,7 +157,7 @@ require_once __DIR__ . '/../../app/init.php';
       <div class="page-head">
         <div>
           <div class="page-title" style="margin-bottom:4px">历史版本</div>
-          <div class="page-sub">记录每次更新内容。新增时写入当前程序版本号，并同步为站点当前版本</div>
+          <div class="page-sub">新增时按更新类型自动生成版本号：更新升次版本，优化/修复升修订号，并同步为站点当前版本</div>
         </div>
         <button class="btn btn-primary" id="verAddBtn">新增版本</button>
       </div>
@@ -179,9 +179,12 @@ require_once __DIR__ . '/../../app/init.php';
             <label>站点描述</label>
             <input class="field" id="set_site_desc">
           </div>
-          <div>
+          <div class="form-grid-full">
             <label>当前版本号</label>
-            <input class="field" id="set_site_version" readonly placeholder="自动生成">
+            <div class="version-current" id="set_site_version_wrap">
+              <span class="version-current-num" id="set_site_version">—</span>
+              <span class="version-current-hint">由「历史版本」新增记录时自动生成，此处只读</span>
+            </div>
           </div>
           <div>
             <label>公告</label>
@@ -406,20 +409,21 @@ require_once __DIR__ . '/../../app/init.php';
 
 <!-- 版本编辑弹窗 -->
 <div class="modal-mask hide" id="verModal">
-  <div class="modal">
+  <div class="modal modal-ver">
     <div class="modal-title" id="verModalTitle">新增版本</div>
     <input type="hidden" id="verId">
     <div class="form-grid">
-      <div>
-        <label>版本号</label>
-        <input class="field" id="verVersion" readonly placeholder="保存时自动生成">
+      <div class="form-grid-full">
+        <label>即将生成的版本号</label>
+        <div class="version-preview" id="verVersionPreview">保存后自动生成</div>
+        <p class="field-hint" id="verVersionHint">选择类型后预览下一版本号。更新升次版本（v1.3.0 → v1.4.0），优化/修复升修订号（v1.3.0 → v1.3.1）</p>
       </div>
-      <div>
+      <div class="form-grid-full">
         <label>类型</label>
         <select class="field" id="verType">
-          <option value="update">更新</option>
-          <option value="optimize">优化</option>
-          <option value="fix">修复</option>
+          <option value="update">更新（次版本 +1）</option>
+          <option value="optimize">优化（修订号 +1）</option>
+          <option value="fix">修复（修订号 +1）</option>
         </select>
       </div>
       <div class="form-grid-full">
@@ -428,7 +432,7 @@ require_once __DIR__ . '/../../app/init.php';
       </div>
       <div class="form-grid-full">
         <label>更新内容</label>
-        <textarea class="field" id="verContent" rows="3" placeholder="详细更新说明（可选）"></textarea>
+        <textarea class="field" id="verContent" rows="4" placeholder="详细更新说明（可选）"></textarea>
       </div>
     </div>
     <button class="btn btn-primary btn-block" id="verSaveBtn" style="margin-top:18px">保存</button>
@@ -504,8 +508,7 @@ window.ADMIN = {
   siteUrl: <?= json_encode(cfg('site_url', '')) ?>,
   csrf: <?= json_encode(csrf_token()) ?>
 };
-window.WM_APP_VERSION = <?= json_encode((string)cfg('app_version', 'v1.3.0')) ?>;
 </script>
-<script src="../assets/js/admin.js?v=20260902h"></script>
+<script src="../assets/js/admin.js?v=20260903a"></script>
 </body>
 </html>

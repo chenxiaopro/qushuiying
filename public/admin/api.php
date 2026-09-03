@@ -542,10 +542,15 @@ function admin_version_save()
         ok(['id' => $id]);
     }
 
-    $version = (string)cfg('app_version', 'v1.3.0');
+    $latest = DB::one('SELECT version FROM versions ORDER BY id DESC LIMIT 1');
+    $base = $latest && !empty($latest['version'])
+        ? (string)$latest['version']
+        : (string)setting('site_version', cfg('app_version', 'v1.3.0'));
+    $version = bump_semver($base, $type);
     DB::execute('INSERT INTO versions(version,title,type,content,created_at) VALUES(?,?,?,?,NOW())', [$version, $title, $type, $content]);
+    $newId = (int)DB::lastId();
     set_setting('site_version', $version);
-    ok(['id' => (int)DB::lastId(), 'version' => $version]);
+    ok(['id' => $newId, 'version' => $version]);
 }
 
 function admin_version_delete()
