@@ -17,6 +17,25 @@ $wechatDesc = trim(setting('wechat_desc', ''));
 $parseCost = (int)setting('parse_cost', 1);
 $registerPoints = (int)setting('register_points', 0);
 $siteVersion = trim(setting('site_version', ''));
+$shareTitle = trim(setting('share_title', ''));
+if ($shareTitle === '') {
+    $shareTitle = $siteName;
+}
+$shareDesc = trim(setting('share_desc', ''));
+if ($shareDesc === '') {
+    $shareDesc = $siteDesc;
+}
+$shareImage = trim(setting('share_image', ''));
+$https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443)
+    || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
+$shareUrl = rtrim((string)cfg('site_url', ''), '/');
+if ($shareUrl === '') {
+    $shareUrl = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+}
+if ($shareImage !== '' && !preg_match('#^https?://#i', $shareImage)) {
+    $shareImage = $shareUrl . '/' . ltrim($shareImage, '/');
+}
 $payTypes = Epay::payTypes();
 $payEnabled = Epay::enabled();
 $alipayEnabled = AlipayF2F::enabled();
@@ -40,7 +59,28 @@ $csrf = csrf_token();
 <title><?= htmlspecialchars($siteName) ?> - 一键去水印</title>
 <meta name="description" content="<?= htmlspecialchars($siteDesc) ?>">
 <meta name="theme-color" content="#2f6bff">
-<link rel="stylesheet" href="assets/css/style.css?v=20260902">
+<meta itemprop="name" content="<?= htmlspecialchars($shareTitle) ?>">
+<meta itemprop="description" content="<?= htmlspecialchars($shareDesc) ?>">
+<?php if ($shareImage !== ''): ?>
+<meta itemprop="image" content="<?= htmlspecialchars($shareImage) ?>">
+<link rel="image_src" href="<?= htmlspecialchars($shareImage) ?>">
+<?php endif; ?>
+<meta property="og:type" content="website">
+<meta property="og:title" content="<?= htmlspecialchars($shareTitle) ?>">
+<meta property="og:description" content="<?= htmlspecialchars($shareDesc) ?>">
+<meta property="og:url" content="<?= htmlspecialchars($shareUrl) ?>">
+<meta property="og:site_name" content="<?= htmlspecialchars($siteName) ?>">
+<?php if ($shareImage !== ''): ?>
+<meta property="og:image" content="<?= htmlspecialchars($shareImage) ?>">
+<meta property="og:image:secure_url" content="<?= htmlspecialchars($shareImage) ?>">
+<?php endif; ?>
+<meta name="twitter:card" content="<?= $shareImage !== '' ? 'summary_large_image' : 'summary' ?>">
+<meta name="twitter:title" content="<?= htmlspecialchars($shareTitle) ?>">
+<meta name="twitter:description" content="<?= htmlspecialchars($shareDesc) ?>">
+<?php if ($shareImage !== ''): ?>
+<meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
+<?php endif; ?>
+<link rel="stylesheet" href="assets/css/style.css?v=20260902h">
 </head>
 <body>
 
@@ -81,30 +121,6 @@ $csrf = csrf_token();
       <button class="btn btn-primary btn-parse" id="btnParse" type="button">立即解析</button>
       <p class="parse-tip">登录后即可使用，每次解析消耗 <b><?= (int)$parseCost ?></b> 点 · 支持 Ctrl / Cmd + Enter</p>
     </div>
-
-    <div class="feature-grid">
-      <div class="feature-item">
-        <div class="feature-icon">1</div>
-        <div class="feature-text">
-          <b>多平台识别</b>
-          <span>抖音、快手、小红书、B 站等链接自动匹配</span>
-        </div>
-      </div>
-      <div class="feature-item">
-        <div class="feature-icon">2</div>
-        <div class="feature-text">
-          <b>视频 / 图集 / 实况</b>
-          <span>无水印视频、图集打包、背景音乐一键下载</span>
-        </div>
-      </div>
-      <div class="feature-item">
-        <div class="feature-icon">3</div>
-        <div class="feature-text">
-          <b>点数付费</b>
-          <span>卡密充值<?= $onlinePayEnabled ? ' + 在线支付' : '' ?>，解析成功后再扣点</span>
-        </div>
-      </div>
-    </div>
   </div>
 </section>
 
@@ -142,6 +158,32 @@ $csrf = csrf_token();
       <span class="result-list-count" id="listCount"></span>
     </div>
     <div class="result-list-grid" id="resultListGrid"></div>
+  </div>
+</section>
+
+<section class="container feature-section">
+  <div class="feature-grid">
+    <div class="feature-item">
+      <div class="feature-icon">1</div>
+      <div class="feature-text">
+        <b>多平台识别</b>
+        <span>抖音、快手、小红书、B 站等链接自动匹配</span>
+      </div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">2</div>
+      <div class="feature-text">
+        <b>视频 / 图集 / 实况</b>
+        <span>无水印视频、图集打包、背景音乐一键下载</span>
+      </div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-icon">3</div>
+      <div class="feature-text">
+        <b>点数付费</b>
+        <span>卡密充值<?= $onlinePayEnabled ? ' + 在线支付' : '' ?>，解析成功后再扣点</span>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -274,6 +316,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260902d"></script>
+<script src="assets/js/app.js?v=20260902e"></script>
 </body>
 </html>

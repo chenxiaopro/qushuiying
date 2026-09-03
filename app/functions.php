@@ -142,6 +142,30 @@ function mask_str($s, $head = 2, $tail = 2)
     return mb_substr($s, 0, $head) . '***' . mb_substr($s, $len - $tail);
 }
 
+function http_ssl_opts($relax = false, $tls12 = true)
+{
+    $opts = [
+        CURLOPT_SSL_VERIFYPEER => $relax ? false : true,
+        CURLOPT_SSL_VERIFYHOST => $relax ? 0 : 2,
+    ];
+    if ($tls12 && defined('CURL_SSLVERSION_TLSv1_2')) {
+        $opts[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2;
+    }
+    return $opts;
+}
+
+function http_ssl_compat_error($err)
+{
+    $e = strtolower((string)$err);
+    return strpos($e, 'key usage') !== false
+        || strpos($e, 'certificate key usage') !== false
+        || strpos($e, 'inadequate for attempted operation') !== false
+        || strpos($e, 'unknown cipher') !== false
+        || strpos($e, 'ssl23_get_server_hello') !== false
+        || strpos($e, 'ssl/tls') !== false
+        || strpos($e, 'certificate') !== false;
+}
+
 /** curl GET */
 function http_get($url, $headers = [], $timeout = 15)
 {
@@ -157,62 +181,84 @@ function http_post($url, $data, $headers = [], $timeout = 15, $asJson = false)
 
 function http_request($method, $url, $body = null, $headers = [], $timeout = 15, $asJson = false)
 {
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => $url,
-        CURLOPT_CUSTOMREQUEST  => $method,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => $timeout,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 5,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
-        CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    ]);
-    $hs = array_merge(['Accept: */*'], $headers);
-    if ($body !== null) {
-        if ($method === 'POST') {
-            $hs[] = $asJson
-                ? 'Content-Type: application/json; charset=utf-8'
-                : 'Content-Type: application/x-www-form-urlencoded';
+    $run = function ($relax, $tls12) use ($method, $url, $body, $headers, $timeout, $asJson) {
+        $ch = curl_init();
+        curl_setopt_array($ch, http_ssl_opts($relax, $tls12) + [
+            CURLOPT_URL            => $url,
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        ]);
+        $hs = array_merge(['Accept: */*'], $headers);
+        if ($body !== null) {
+            if ($method === 'POST') {
+                $hs[] = $asJson
+                    ? 'Content-Type: application/json; charset=utf-8'
+                    : 'Content-Type: application/x-www-form-urlencoded';
+            }
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-    }
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $hs);
-    $resp = curl_exec($ch);
-    if ($resp === false) {
-        $err = curl_error($ch);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $hs);
+        $resp = curl_exec($ch);
+        if ($resp === false) {
+            $err = curl_error($ch);
+            curl_close($ch);
+            return [false, $err];
+        }
         curl_close($ch);
-        throw new RuntimeException('HTTP请求失败: ' . $err);
+        return [true, $resp];
+    };
+
+    [$ok, $out] = $run(false, true);
+    if (!$ok && http_ssl_compat_error($out)) {
+        [$ok, $out] = $run(false, false);
     }
-    curl_close($ch);
-    return $resp;
+    if (!$ok && http_ssl_compat_error($out)) {
+        [$ok, $out] = $run(true, true);
+    }
+    if (!$ok) {
+        throw new RuntimeException('HTTP请求失败: ' . $out);
+    }
+    return $out;
 }
 
 /** 重定向到 finalUrl，返回最终 url */
 function get_final_url($url, $timeout = 12)
 {
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => $url,
-        CURLOPT_NOBODY         => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 6,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT        => $timeout,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
-        CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    ]);
-    curl_exec($ch);
-    $final = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
-    curl_close($ch);
+    $run = function ($relax, $tls12) use ($url, $timeout) {
+        $ch = curl_init();
+        curl_setopt_array($ch, http_ssl_opts($relax, $tls12) + [
+            CURLOPT_URL            => $url,
+            CURLOPT_NOBODY         => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 6,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        ]);
+        curl_exec($ch);
+        $err = curl_error($ch);
+        $final = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($ch);
+        return [$err, $final];
+    };
+
+    [$err, $final] = $run(false, true);
+    if ($err !== '' && http_ssl_compat_error($err)) {
+        [$err, $final] = $run(false, false);
+    }
+    if ($err !== '' && http_ssl_compat_error($err)) {
+        [$err, $final] = $run(true, true);
+    }
     return $final ?: $url;
 }
 

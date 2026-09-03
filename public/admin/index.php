@@ -46,6 +46,7 @@ require_once __DIR__ . '/../../app/init.php';
     </nav>
     <nav class="nav-group">
       <div class="nav-title">系统</div>
+      <div class="nav-item" data-page="versions">历史版本</div>
       <div class="nav-item" data-page="settings">站点设置</div>
     </nav>
     <div class="logout" id="adminLogout">退出登录</div>
@@ -151,6 +152,20 @@ require_once __DIR__ . '/../../app/init.php';
       </div>
     </div>
 
+    <!-- 历史版本 -->
+    <div class="page hide" data-name="versions">
+      <div class="page-head">
+        <div>
+          <div class="page-title" style="margin-bottom:4px">历史版本</div>
+          <div class="page-sub">记录每次更新内容。新增时写入当前程序版本号，并同步为站点当前版本</div>
+        </div>
+        <button class="btn btn-primary" id="verAddBtn">新增版本</button>
+      </div>
+      <div class="card">
+        <div id="versionsTable"></div>
+      </div>
+    </div>
+
     <!-- 设置 -->
     <div class="page hide" data-name="settings">
       <div class="page-title">站点设置</div>
@@ -165,7 +180,7 @@ require_once __DIR__ . '/../../app/init.php';
             <input class="field" id="set_site_desc">
           </div>
           <div>
-            <label>当前版本号（自动生成）</label>
+            <label>当前版本号</label>
             <input class="field" id="set_site_version" readonly placeholder="自动生成">
           </div>
           <div>
@@ -215,6 +230,26 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveWechatBtn" style="margin-top:16px">保存公众号设置</button>
       </div>
 
+      <div class="page-title">微信 / QQ 分享卡片</div>
+      <div class="card">
+        <div class="page-sub" style="margin-bottom:14px">好友、群、朋友圈、QQ 空间识别链接时展示的标题、描述和封面图。留空则回退到站点名称与站点描述。封面图请使用可公网访问的完整图片 URL（建议 300x300 以上）。</div>
+        <div class="form-grid">
+          <div>
+            <label>分享标题</label>
+            <input class="field" id="set_share_title" placeholder="如：好东西分享给你">
+          </div>
+          <div>
+            <label>分享描述</label>
+            <input class="field" id="set_share_desc" placeholder="如：短视频一键去水印">
+          </div>
+          <div>
+            <label>分享封面图</label>
+            <input class="field" id="set_share_image" placeholder="https://...（图床图片 URL）">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="saveShareBtn" style="margin-top:16px">保存分享设置</button>
+      </div>
+
       <div class="page-title">易支付配置</div>
       <div class="card">
         <div class="form-grid">
@@ -247,6 +282,8 @@ require_once __DIR__ . '/../../app/init.php';
           </div>
         </div>
         <button class="btn btn-primary" id="saveEpayBtn" style="margin-top:16px">保存支付配置</button>
+        <button class="btn btn-ghost" id="epayCheckBtn" style="margin-top:16px;margin-left:8px">密钥自检</button>
+        <div class="hide" id="epayCheckResult" style="margin-top:14px;font-size:13px"></div>
         <div class="page-title" style="margin-top:18px">支付回调配置</div>
         <p style="font-size:13px;color:#8a90a3">
           在易支付后台将「异步通知地址」配置为：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/pay_notify.php') ?></code><br>
@@ -367,6 +404,37 @@ require_once __DIR__ . '/../../app/init.php';
   </div>
 </div>
 
+<!-- 版本编辑弹窗 -->
+<div class="modal-mask hide" id="verModal">
+  <div class="modal">
+    <div class="modal-title" id="verModalTitle">新增版本</div>
+    <input type="hidden" id="verId">
+    <div class="form-grid">
+      <div>
+        <label>版本号</label>
+        <input class="field" id="verVersion" readonly placeholder="保存时自动生成">
+      </div>
+      <div>
+        <label>类型</label>
+        <select class="field" id="verType">
+          <option value="update">更新</option>
+          <option value="optimize">优化</option>
+          <option value="fix">修复</option>
+        </select>
+      </div>
+      <div class="form-grid-full">
+        <label>更新标题</label>
+        <input class="field" id="verTitle" placeholder="如：新增微信 QQ 分享卡片">
+      </div>
+      <div class="form-grid-full">
+        <label>更新内容</label>
+        <textarea class="field" id="verContent" rows="3" placeholder="详细更新说明（可选）"></textarea>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" id="verSaveBtn" style="margin-top:18px">保存</button>
+  </div>
+</div>
+
 <!-- 接口编辑弹窗 -->
 <div class="modal-mask hide" id="apiModal">
   <div class="modal modal-lg">
@@ -436,7 +504,8 @@ window.ADMIN = {
   siteUrl: <?= json_encode(cfg('site_url', '')) ?>,
   csrf: <?= json_encode(csrf_token()) ?>
 };
+window.WM_APP_VERSION = <?= json_encode((string)cfg('app_version', 'v1.3.0')) ?>;
 </script>
-<script src="../assets/js/admin.js?v=20260902e"></script>
+<script src="../assets/js/admin.js?v=20260902h"></script>
 </body>
 </html>

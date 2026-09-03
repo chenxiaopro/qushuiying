@@ -81,9 +81,10 @@ a { color: var(--primary); text-decoration: none; }
 .parse-input-bar {
   display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;
 }
+.feature-section { padding: 8px 0 0; }
 .feature-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
-  max-width: 640px; margin: 28px auto 0;
+  max-width: 640px; margin: 0 auto 8px;
 }
 .feature-item {
   background: var(--card); border-radius: 12px; padding: 14px 16px;
@@ -216,7 +217,7 @@ a { color: var(--primary); text-decoration: none; }
   .result-list-grid { grid-template-columns: repeat(2, 1fr); }
   .result-actions .btn { flex: 1 1 45%; padding-left: 8px; padding-right: 8px; }
   .points-grid { grid-template-columns: repeat(3, 1fr); }
-  .feature-grid { grid-template-columns: 1fr; margin-top: 20px; }
+  .feature-grid { grid-template-columns: 1fr; margin-top: 0; }
 }
 
 /* 弹窗 */

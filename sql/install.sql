@@ -103,6 +103,17 @@ CREATE TABLE IF NOT EXISTS `parse_types` (
   UNIQUE KEY `uk_key` (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='解析类型表';
 
+CREATE TABLE IF NOT EXISTS `versions` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `version` VARCHAR(32) NOT NULL COMMENT '版本号(如 v1.3.0)',
+  `title` VARCHAR(100) NOT NULL COMMENT '更新标题',
+  `type` VARCHAR(20) NOT NULL DEFAULT 'update' COMMENT '类型:update更新/optimize优化/fix修复',
+  `content` TEXT NULL COMMENT '更新内容',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_version` (`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本更新记录';
+
 CREATE TABLE IF NOT EXISTS `settings` (
   `k` VARCHAR(64) NOT NULL,
   `v` TEXT NULL,
@@ -137,8 +148,16 @@ INSERT INTO `settings` (`k`, `v`) VALUES
 ('bark_notify_register', '0'),
 ('bark_notify_recharge', '0'),
 ('bark_sound', ''),
-('site_version', DATE_FORMAT(NOW(), '%Y-%m.%d-%H:%i'))
+('share_title', ''),
+('share_desc', ''),
+('share_image', ''),
+('site_version', 'v1.3.0')
 ON DUPLICATE KEY UPDATE `k`=`k`;
+
+-- 默认版本记录
+INSERT INTO `versions` (`version`, `title`, `type`, `content`) VALUES
+('v1.3.0', '易支付对接与稳定性优化', 'optimize', '1. 易支付支持 RSA 签名、POST 表单跳转，后台新增「密钥自检」并输出商户公钥；\n2. 修复 LiteSSL/OpenSSL3 证书导致出站 HTTPS 请求失败，默认 TLS1.2 并自动回退；\n3. 前台 1/2/3 功能卡片移至页面底部。')
+ON DUPLICATE KEY UPDATE `version`=VALUES(`version`);
 
 -- 默认解析类型
 INSERT INTO `parse_types` (`name`, `key`, `sort`, `enabled`) VALUES
