@@ -277,11 +277,12 @@ function api_pay_create()
 
     try {
         $epay = new Epay(setting('epay_api'), setting('epay_pid'), setting('epay_public_key'), setting('epay_private_key'));
-        $url = $epay->submitUrl($orderSn, $money, $type, $subject . '-' . $points . '点');
+        $action = $epay->submitAction();
+        $params = $epay->submitParams($orderSn, $money, $type, $subject . '-' . $points . '点');
     } catch (RuntimeException $e) {
         fail('支付配置错误：' . $e->getMessage());
     }
-    ok(['order_sn' => $orderSn, 'pay_url' => $url, 'money' => $money, 'points' => $points, 'type' => $type]);
+    ok(['order_sn' => $orderSn, 'pay_action' => $action, 'pay_params' => $params, 'money' => $money, 'points' => $points, 'type' => $type]);
 }
 
 function api_pay_query()

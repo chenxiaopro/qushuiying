@@ -544,7 +544,18 @@
         }, 2000);
       } else {
         showModal('payLoadingModal');
-        window.location.href = res.data.pay_url;
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = res.data.pay_action;
+        Object.keys(res.data.pay_params || {}).forEach(function (k) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = k;
+          input.value = res.data.pay_params[k];
+          form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
       }
     });
   });

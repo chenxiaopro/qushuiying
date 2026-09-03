@@ -53,8 +53,14 @@ class Epay
         return $out ?: ['alipay' => '支付宝', 'wxpay' => '微信'];
     }
 
-    /** 生成页面跳转支付地址（api/pay/submit） */
-    public function submitUrl($orderSn, $money, $type, $name)
+    /** 支付提交地址（api/pay/submit，POST 表单用） */
+    public function submitAction()
+    {
+        return $this->api . '/api/pay/submit';
+    }
+
+    /** 生成支付提交参数（已含 pid/timestamp/sign/sign_type，供 POST 表单或 GET 链接使用） */
+    public function submitParams($orderSn, $money, $type, $name)
     {
         $params = [
             'type'         => $type,
@@ -64,8 +70,14 @@ class Epay
             'name'         => $name,
             'money'        => sprintf('%.2f', $money),
         ];
-        $params = $this->buildRequestParam($params);
-        return $this->api . '/api/pay/submit?' . http_build_query($params);
+        return $this->buildRequestParam($params);
+    }
+
+    /** 生成页面跳转支付地址（GET 链接方式，兼容旧用法） */
+    public function submitUrl($orderSn, $money, $type, $name)
+    {
+        $params = $this->submitParams($orderSn, $money, $type, $name);
+        return $this->submitAction() . '?' . http_build_query($params);
     }
 
     /** 校验异步通知，成功返回 ['order_sn','money','type','trade_no','trade_status']，失败返回 null */
@@ -99,6 +111,34 @@ class Epay
         }
         $result = $this->execute('api/pay/query', $params);
         return is_array($result) ? $result : null;
+    }
+
+    /** 发起支付（API 接口，api/pay/create） */
+    public function create($outTradeNo, $money, $type, $name, $param = [])
+    {
+        $params = [
+            'type'         => $type,
+            'notify_url'   => $this->siteUrl() . '/pay_notify.php',
+            'return_url'   => $this->siteUrl() . '/pay_return.php',
+            'out_trade_no' => $outTradeNo,
+            'name'         => $name,
+            'money'        => sprintf('%.2f', $money),
+        ];
+        foreach ($param as $k => $v) {
+            $params[$k] = $v;
+        }
+        return $this->execute('api/pay/create', $params);
+    }
+
+    /** 订单退款（api/pay/refund） */
+    public function refund($outRefundNo, $tradeNo, $money)
+    {
+        $params = [
+            'trade_no'      => $tradeNo,
+            'money'         => sprintf('%.2f', $money),
+            'out_refund_no' => $outRefundNo,
+        ];
+        return $this->execute('api/pay/refund', $params);
     }
 
     /** 发起 API 请求（api/pay/create 等）并验签 */
@@ -163,9 +203,14 @@ class Epay
     /** 商户私钥签名（SHA256WithRSA，输出 base64） */
     private function rsaPrivateSign($data)
     {
-        $privateKey = $this->resolveKey($this->privateKey, ['PRIVATE KEY', 'RSA PRIVATE KEY']);
+        $privateKey = $this->resolvePrivateKey();
         if (!$privateKey) {
-            throw new RuntimeException('签名失败：商户私钥错误（请确认后台已填写正确的商户私钥）');
+            $detail = '';
+            while (($e = openssl_error_string()) !== false) {
+                $detail = trim($e);
+            }
+            error_log('[wm-pay] 商户私钥解析失败: ' . $detail);
+            throw new RuntimeException('签名失败：商户私钥错误（请确认后台已填写正确的商户私钥，不要包含多余空格或换行）');
         }
         openssl_sign($data, $sign, $privateKey, OPENSSL_ALGO_SHA256);
         return base64_encode($sign);
@@ -174,7 +219,7 @@ class Epay
     /** 平台公钥验签（SHA256WithRSA） */
     private function rsaPublicVerify($data, $sign)
     {
-        $publicKey = $this->resolveKey($this->publicKey, ['PUBLIC KEY', 'RSA PUBLIC KEY']);
+        $publicKey = $this->resolvePublicKey();
         if (!$publicKey) {
             throw new RuntimeException('验签失败：平台公钥错误（请确认后台已填写正确的平台公钥）');
         }
@@ -182,19 +227,28 @@ class Epay
         return $result === 1;
     }
 
-    /** 依次尝试多种 PEM 包装格式解析密钥，返回 openssl key 资源或 null */
-    private function resolveKey($key, $types)
+    /** 解析商户私钥（依次尝试 PKCS#8 / PKCS#1） */
+    private function resolvePrivateKey()
+    {
+        return self::parsePrivateKey($this->privateKey);
+    }
+
+    /** 解析平台公钥（依次尝试 PKCS#8 / PKCS#1） */
+    private function resolvePublicKey()
+    {
+        return self::parsePublicKey($this->publicKey);
+    }
+
+    /** 解析商户私钥（静态，供自检使用） */
+    public static function parsePrivateKey($key)
     {
         $key = trim((string)$key);
         if ($key === '') {
             return null;
         }
-        foreach ($types as $type) {
+        foreach (['PRIVATE KEY', 'RSA PRIVATE KEY'] as $type) {
             $pem = self::wrapKey($key, $type);
             $res = @openssl_pkey_get_private($pem);
-            if ($res === false) {
-                $res = @openssl_pkey_get_public($pem);
-            }
             if ($res !== false) {
                 return $res;
             }
@@ -202,14 +256,78 @@ class Epay
         return null;
     }
 
-    /** 将纯 base64 密钥包装为 PEM 格式（兼容已带 PEM 头的输入） */
+    /** 解析平台公钥（静态，供自检使用） */
+    public static function parsePublicKey($key)
+    {
+        $key = trim((string)$key);
+        if ($key === '') {
+            return null;
+        }
+        foreach (['PUBLIC KEY', 'RSA PUBLIC KEY'] as $type) {
+            $pem = self::wrapKey($key, $type);
+            $res = @openssl_pkey_get_public($pem);
+            if ($res !== false) {
+                return $res;
+            }
+        }
+        return null;
+    }
+
+    /** 自检：解析密钥并做一次签名/验签往返，返回诊断信息 */
+    public static function selfCheck()
+    {
+        $out = [
+            'private_valid'   => false,
+            'public_valid'    => false,
+            'sign_ok'         => false,
+            'derived_public'  => '',
+            'message'         => '',
+        ];
+
+        $priv = self::parsePrivateKey(setting('epay_private_key', ''));
+        if ($priv !== null) {
+            $out['private_valid'] = true;
+            $details = openssl_pkey_get_details($priv);
+            $pubPem = $details['key'] ?? '';
+            $pubBody = preg_replace('/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s+/', '', $pubPem);
+            $out['derived_public'] = $pubBody;
+            $test = 'wm-epay-selfcheck-' . time();
+            openssl_sign($test, $sig, $priv, OPENSSL_ALGO_SHA256);
+            $pubDerived = openssl_pkey_get_public($pubPem);
+            $out['sign_ok'] = $pubDerived !== false
+                && openssl_verify($test, $sig, $pubDerived, OPENSSL_ALGO_SHA256) === 1;
+        }
+
+        if (self::parsePublicKey(setting('epay_public_key', '')) !== null) {
+            $out['public_valid'] = true;
+        }
+
+        if (!$out['private_valid']) {
+            $out['message'] = '商户私钥无法解析，请检查是否填写完整';
+        } elseif (!$out['sign_ok']) {
+            $out['message'] = '商户私钥自检失败';
+        } else {
+            $out['message'] = '商户私钥有效。若平台仍提示 RSA签名校验失败，请确认平台上登记的商户公钥与下方「商户公钥」一致。';
+        }
+        return $out;
+    }
+
+    /** 将任意形式的密钥输入包装为规范 PEM（兼容带/不带 PEM 头、单行或多行、含 BOM/隐藏字符） */
     private static function wrapKey($key, $type)
     {
         $key = trim((string)$key);
-        if (stripos($key, '-----BEGIN') === 0) {
-            return $key;
+        if ($key === '') {
+            return '';
         }
-        $body = preg_replace('/\s+/', '', $key);
+        // 剥离已有 PEM 头尾，只保留 base64 主体
+        if (preg_match('/-----BEGIN [A-Z ]+-----/', $key)) {
+            $key = preg_replace('/-----BEGIN [A-Z ]+-----|-----END [A-Z ]+-----/', '', $key);
+        }
+        // 去除所有非 base64 字符（空白、换行、BOM、隐藏字符等）
+        $body = preg_replace('/[^A-Za-z0-9+\/=]/', '', $key);
+        if ($body === '') {
+            return '';
+        }
         return "-----BEGIN {$type}-----\n"
             . wordwrap($body, 64, "\n", true)
             . "\n-----END {$type}-----";

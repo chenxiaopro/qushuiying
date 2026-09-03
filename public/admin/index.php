@@ -282,6 +282,8 @@ require_once __DIR__ . '/../../app/init.php';
           </div>
         </div>
         <button class="btn btn-primary" id="saveEpayBtn" style="margin-top:16px">保存支付配置</button>
+        <button class="btn btn-ghost" id="epayCheckBtn" style="margin-top:16px;margin-left:8px">密钥自检</button>
+        <div class="hide" id="epayCheckResult" style="margin-top:14px;font-size:13px"></div>
         <div class="page-title" style="margin-top:18px">支付回调配置</div>
         <p style="font-size:13px;color:#8a90a3">
           在易支付后台将「异步通知地址」配置为：<code><?= htmlspecialchars(($cfg = cfg('site_url')) ? $cfg : (($_SERVER['HTTPS'] ?? '') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1') . '/pay_notify.php') ?></code><br>
@@ -503,6 +505,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260902g"></script>
+<script src="../assets/js/admin.js?v=20260902h"></script>
 </body>
 </html>

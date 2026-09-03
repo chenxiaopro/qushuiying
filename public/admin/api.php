@@ -16,6 +16,7 @@
  */
 
 require_once __DIR__ . '/../../app/init.php';
+require_once __DIR__ . '/../../app/payment/Epay.php';
 
 try {
     $action = input('action', '');
@@ -71,6 +72,10 @@ try {
         case 'save_settings':
             require_admin();
             admin_settings_save();
+            break;
+        case 'epay_check':
+            require_admin();
+            ok(Epay::selfCheck());
             break;
         case 'apis':
             require_admin();

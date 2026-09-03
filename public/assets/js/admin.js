@@ -442,6 +442,24 @@
       toast('支付配置已保存');
     });
   });
+  $('epayCheckBtn').addEventListener('click', function () {
+    adminApi('epay_check').then(function (res) {
+      if (!checkAuth(res)) return;
+      var box = $('epayCheckResult');
+      box.classList.remove('hide');
+      if (res.code !== 0) { box.innerHTML = '<span style="color:#e5484d">自检失败：' + esc(res.msg) + '</span>'; return; }
+      var d = res.data;
+      var lines = [];
+      lines.push((d.private_valid ? '商户私钥：<span style="color:#12a150">有效</span>' : '商户私钥：<span style="color:#e5484d">无效</span>'));
+      lines.push((d.public_valid ? '平台公钥：<span style="color:#12a150">有效</span>' : '平台公钥：<span style="color:#e5484d">无效或未填写</span>'));
+      lines.push((d.sign_ok ? '签名往返：<span style="color:#12a150">通过</span>' : '签名往返：<span style="color:#e5484d">失败</span>'));
+      if (d.derived_public) {
+        lines.push('商户公钥（请与平台登记的公钥比对）：<textarea readonly rows="3" style="width:100%;margin-top:6px;font-size:12px">' + esc(d.derived_public) + '</textarea>');
+      }
+      lines.push('<span style="color:#8a90a3">' + esc(d.message) + '</span>');
+      box.innerHTML = lines.join('<br>');
+    });
+  });
   $('saveAlipayBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
       ['alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key']
