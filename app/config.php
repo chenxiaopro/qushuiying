@@ -14,6 +14,8 @@ $GLOBALS['config'] = [
     ],
     // 站点访问地址，例如 https://wm.example.com （可留空自动识别）
     'site_url' => '',
+    // 当前程序版本号（发版时由开发者维护，站点「当前版本」与「历史版本」同步显示）
+    'app_version' => 'v1.3.0',
     'debug'    => false,
     // 管理员登录用 Cookie 有效期(秒)
     'session_ttl' => 7 * 86400,

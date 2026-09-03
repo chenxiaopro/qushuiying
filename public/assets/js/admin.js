@@ -651,7 +651,7 @@
     $('verModalTitle').textContent = id ? '编辑版本' : '新增版本';
     var v = id ? versionsDataCache[id] : null;
     $('verId').value = id || '';
-    $('verVersion').value = v ? v.version : '保存时自动生成';
+    $('verVersion').value = v ? v.version : (window.WM_APP_VERSION || '保存时自动生成');
     $('verType').value = v ? v.type : 'update';
     $('verTitle').value = v ? v.title : '';
     $('verContent').value = v ? v.content : '';

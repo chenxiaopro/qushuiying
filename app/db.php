@@ -65,7 +65,7 @@ class DB
             if (!$tables) {
                 self::$pdo->exec("CREATE TABLE `versions` (
                     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                    `version` VARCHAR(32) NOT NULL COMMENT '版本号(自动生成 Y-m.d-H:i)',
+                    `version` VARCHAR(32) NOT NULL COMMENT '版本号(如 v1.3.0)',
                     `title` VARCHAR(100) NOT NULL COMMENT '更新标题',
                     `type` VARCHAR(20) NOT NULL DEFAULT 'update' COMMENT '类型:update更新/optimize优化/fix修复',
                     `content` TEXT NULL COMMENT '更新内容',
@@ -74,11 +74,18 @@ class DB
                     KEY `idx_version` (`version`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本更新记录'");
             }
+            // 无任何版本记录时，写入一条当前版本的默认记录
+            $cnt = (int)self::$pdo->query("SELECT COUNT(*) FROM `versions`")->fetchColumn();
+            if ($cnt === 0) {
+                $ver = (string)cfg('app_version', 'v1.3.0');
+                $st = self::$pdo->prepare("INSERT INTO `versions` (`version`,`title`,`type`,`content`,`created_at`) VALUES (?,?,?,?,NOW())");
+                $st->execute([$ver, '易支付对接与稳定性优化', 'optimize', "1. 易支付支持 RSA 签名、POST 表单跳转，后台新增「密钥自检」并输出商户公钥；\n2. 修复 LiteSSL/OpenSSL3 证书导致出站 HTTPS 请求失败，默认 TLS1.2 并自动回退；\n3. 前台 1/2/3 功能卡片移至页面底部。"]);
+            }
         } catch (Throwable $e) {
             // 忽略
         }
         try {
-            $ver = date('Y-m.d-H:i');
+            $ver = (string)cfg('app_version', 'v1.3.0');
             self::$pdo->exec("INSERT IGNORE INTO `settings` (`k`,`v`) VALUES
                 ('wechat_enabled','0'),('wechat_name',''),('wechat_qrcode',''),('wechat_desc',''),
                 ('site_version'," . self::$pdo->quote($ver) . "),
@@ -86,7 +93,7 @@ class DB
                 ('alipay_enabled','0'),('alipay_app_id',''),('alipay_private_key',''),('alipay_public_key',''),
                 ('bark_enabled','0'),('bark_server','https://api.day.app'),('bark_key',''),('bark_notify_register','0'),('bark_notify_recharge','0'),('bark_sound',''),
                 ('share_title',''),('share_desc',''),('share_image','')");
-            self::$pdo->exec("UPDATE `settings` SET `v`=" . self::$pdo->quote($ver) . " WHERE `k`='site_version' AND (`v`='' OR `v` LIKE 'v%')");
+            self::$pdo->exec("UPDATE `settings` SET `v`=" . self::$pdo->quote($ver) . " WHERE `k`='site_version' AND (`v`='' OR `v` NOT LIKE 'v%')");
         } catch (Throwable $e) {
             // 忽略
         }

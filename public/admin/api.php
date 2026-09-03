@@ -542,7 +542,7 @@ function admin_version_save()
         ok(['id' => $id]);
     }
 
-    $version = date('Y-m.d-H:i');
+    $version = (string)cfg('app_version', 'v1.3.0');
     DB::execute('INSERT INTO versions(version,title,type,content,created_at) VALUES(?,?,?,?,NOW())', [$version, $title, $type, $content]);
     set_setting('site_version', $version);
     ok(['id' => (int)DB::lastId(), 'version' => $version]);

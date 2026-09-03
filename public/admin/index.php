@@ -157,7 +157,7 @@ require_once __DIR__ . '/../../app/init.php';
       <div class="page-head">
         <div>
           <div class="page-title" style="margin-bottom:4px">历史版本</div>
-          <div class="page-sub">记录每次更新内容。新增时自动写入当前时间版本号，并同步为站点当前版本</div>
+          <div class="page-sub">记录每次更新内容。新增时写入当前程序版本号，并同步为站点当前版本</div>
         </div>
         <button class="btn btn-primary" id="verAddBtn">新增版本</button>
       </div>
@@ -180,7 +180,7 @@ require_once __DIR__ . '/../../app/init.php';
             <input class="field" id="set_site_desc">
           </div>
           <div>
-            <label>当前版本号（自动生成）</label>
+            <label>当前版本号</label>
             <input class="field" id="set_site_version" readonly placeholder="自动生成">
           </div>
           <div>
@@ -411,7 +411,7 @@ require_once __DIR__ . '/../../app/init.php';
     <input type="hidden" id="verId">
     <div class="form-grid">
       <div>
-        <label>版本号（自动生成）</label>
+        <label>版本号</label>
         <input class="field" id="verVersion" readonly placeholder="保存时自动生成">
       </div>
       <div>
@@ -504,6 +504,7 @@ window.ADMIN = {
   siteUrl: <?= json_encode(cfg('site_url', '')) ?>,
   csrf: <?= json_encode(csrf_token()) ?>
 };
+window.WM_APP_VERSION = <?= json_encode((string)cfg('app_version', 'v1.3.0')) ?>;
 </script>
 <script src="../assets/js/admin.js?v=20260902h"></script>
 </body>
