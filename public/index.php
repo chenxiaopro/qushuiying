@@ -80,17 +80,23 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260905c">
+<link rel="stylesheet" href="assets/css/style.css?v=20260905d">
 </head>
 <body>
 
 <header class="nav">
   <div class="container nav-inner">
-    <div class="logo"><?= htmlspecialchars($siteName) ?></div>
+    <div class="logo">
+      <span class="logo-mark"><?= htmlspecialchars(mb_substr($siteName, 0, 1)) ?></span>
+      <span class="logo-text"><?= htmlspecialchars($siteName) ?></span>
+    </div>
     <div class="nav-right">
       <span class="balance hide" id="balance">余额：0 点</span>
       <button class="btn btn-primary btn-sm hide" id="btnRecharge" type="button">充值</button>
-      <button class="username hide" id="username" type="button"></button>
+      <button class="username hide" id="username" type="button">
+        <span class="nav-avatar" id="navAvatar">—</span>
+        <span class="nav-name" id="navName"></span>
+      </button>
       <button class="btn btn-ghost btn-sm" id="btnLogin" type="button">登录</button>
       <button class="btn btn-primary btn-sm" id="btnRegister" type="button">注册</button>
     </div>
@@ -383,6 +389,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260905c"></script>
+<script src="assets/js/app.js?v=20260905d"></script>
 </body>
 </html>

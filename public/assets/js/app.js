@@ -74,7 +74,9 @@
       $(id).classList[loggedIn ? 'add' : 'remove']('hide');
     });
     if (loggedIn) {
-      $('username').textContent = profile.username || $('username').dataset.name || '';
+      var uname = profile.username || $('username').dataset.name || '';
+      if ($('navName')) $('navName').textContent = uname;
+      if ($('navAvatar')) $('navAvatar').textContent = uname ? Array.from(uname)[0].toUpperCase() : '—';
       $('balance').textContent = '余额：' + points + ' 点';
     }
   }
