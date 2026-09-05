@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260905d">
+<link rel="stylesheet" href="assets/css/style.css?v=20260905e">
 </head>
 <body>
 
@@ -154,6 +154,7 @@ $csrf = csrf_token();
       <a class="btn btn-ghost hide" id="btnDownloadMusic" href="#">下载背景音乐</a>
       <a class="btn btn-ghost hide" id="btnDownloadLive" href="#">下载实况视频</a>
       <button class="btn btn-primary hide" id="btnDownloadAll" type="button">打包下载</button>
+      <button class="btn btn-ghost hide" id="btnCopyText" type="button">复制文案</button>
     </div>
   </div>
 
@@ -389,6 +390,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260905d"></script>
+<script src="assets/js/app.js?v=20260905e"></script>
 </body>
 </html>

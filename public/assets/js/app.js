@@ -244,6 +244,28 @@
 
   var currentImages = [];
   var currentBaseName = 'download';
+  var currentCopyText = '';
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('copy failed'));
+    });
+  }
 
   function renderResult(d) {
     var r = d.result;
@@ -310,6 +332,11 @@
     var descEl = $('resultDesc');
     descEl.textContent = showDesc ? desc : '';
     descEl.classList.toggle('hide', !showDesc);
+
+    // 文案复制：标题 + 描述
+    currentCopyText = [title, showDesc ? desc : ''].filter(Boolean).join('\n');
+    var btnCopy = $('btnCopyText');
+    if (btnCopy) btnCopy.classList.toggle('hide', !currentCopyText);
 
     // 背景音乐
     var music = r.music || {};
@@ -533,6 +560,16 @@
         btn.textContent = original;
       });
   });
+
+  /* ---------- 文案复制 ---------- */
+  if ($('btnCopyText')) {
+    $('btnCopyText').addEventListener('click', function () {
+      if (!currentCopyText) { toast('暂无可复制文案'); return; }
+      copyToClipboard(currentCopyText).then(function () {
+        toast('文案已复制');
+      }).catch(function () { toast('复制失败，请手动复制'); });
+    });
+  }
 
   /* ---------- 充值 ---------- */
   var selectedPoints = 0;
