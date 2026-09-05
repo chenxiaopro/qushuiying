@@ -71,6 +71,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installed) {
             // 表不存在或字段已存在时忽略
         }
 
+        try {
+            $cols = $pdo->query("SHOW COLUMNS FROM `users` LIKE 'email'")->fetchAll();
+            if (!$cols) {
+                $pdo->exec("ALTER TABLE `users` ADD COLUMN `email` VARCHAR(64) NULL COMMENT '绑定邮箱'");
+            }
+            $idx = $pdo->query("SHOW INDEX FROM `users` WHERE Key_name='uk_email'")->fetchAll();
+            if (!$idx) {
+                $pdo->exec('ALTER TABLE `users` ADD UNIQUE KEY `uk_email` (`email`)');
+            }
+        } catch (Exception $e) {
+            // 忽略
+        }
+
         // 创建管理员（已存在则更新密码，避免重复安装时唯一键冲突）
         $stmt = $pdo->prepare('INSERT INTO admins(username,password,created_at) VALUES(?,?,NOW()) ON DUPLICATE KEY UPDATE password=VALUES(password)');
         $stmt->execute([$adminUser, password_hash($adminPass, PASSWORD_DEFAULT)]);

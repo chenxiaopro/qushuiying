@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `username` VARCHAR(32) NOT NULL COMMENT '用户名',
   `password` VARCHAR(255) NOT NULL COMMENT '密码(哈希)',
+  `email` VARCHAR(64) NULL COMMENT '绑定邮箱',
   `points` INT NOT NULL DEFAULT 0 COMMENT '剩余点数',
   `total_points` INT NOT NULL DEFAULT 0 COMMENT '累计充值点数',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1正常 0禁用',
@@ -16,7 +17,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `remember_token` VARCHAR(64) NULL COMMENT '30天免登录令牌(存哈希)',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_username` (`username`)
+  UNIQUE KEY `uk_username` (`username`),
+  UNIQUE KEY `uk_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
 CREATE TABLE IF NOT EXISTS `admins` (

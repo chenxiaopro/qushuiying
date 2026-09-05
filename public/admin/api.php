@@ -181,7 +181,7 @@ function admin_users()
     $pages = max(1, ceil($total / $pageSize));
     $offset = ($page - 1) * $pageSize;
     $rows = DB::all(
-        'SELECT id,username,points,total_points,status,last_login_at,last_login_ip,created_at FROM users ' . $where .
+        'SELECT id,username,email,points,total_points,status,last_login_at,last_login_ip,created_at FROM users ' . $where .
         ' ORDER BY id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize,
         $params
     );

@@ -104,6 +104,18 @@ class DB
         } catch (Throwable $e) {
             // 忽略
         }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `users` LIKE 'email'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `users` ADD COLUMN `email` VARCHAR(64) NULL COMMENT '绑定邮箱'");
+            }
+            $idx = self::$pdo->query("SHOW INDEX FROM `users` WHERE Key_name='uk_email'")->fetchAll();
+            if (!$idx) {
+                self::$pdo->exec('ALTER TABLE `users` ADD UNIQUE KEY `uk_email` (`email`)');
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
     }
 
     /** 执行并返回受影响行数 */
