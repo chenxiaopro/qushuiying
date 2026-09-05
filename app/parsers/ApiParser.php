@@ -81,25 +81,28 @@ class ApiParser extends BaseParser
         if (!is_array($music)) {
             $music = [];
         }
-        $pics   = $data['pics'] ?? $data['images'] ?? null;
-        $pics   = is_array($pics) ? $pics : [];
+        $pics = self::extractUrls($data['pics'] ?? $data['images'] ?? null);
         $backup = $data['video_backup'] ?? [];
         if (!is_array($backup)) {
             $backup = [];
         }
-        // 实况图动态视频（抖音 Live Photo / 小红书实况等）
-        $live = $data['liveAddr'] ?? $data['live'] ?? null;
-        $live = is_array($live) ? array_values(array_filter(array_map('strval', $live))) : [];
+        $live = self::extractUrls(
+            $data['liveAddr'] ?? $data['live'] ?? $data['live_addr'] ?? $data['liveUrl'] ?? $data['live_urls'] ?? null
+        );
+        $liveFromPics = self::extractUrlsFromItems(
+            $data['pics'] ?? $data['images'] ?? null,
+            ['live', 'liveAddr', 'live_url', 'liveUrl']
+        );
+        if (!empty($liveFromPics)) {
+            $live = array_values(array_unique(array_merge($live, $liveFromPics)));
+        }
 
-        // type=3 实况图：直接返回实况视频（用户期望"动图直接返回视频"）
-        if ($type === 3 && !empty($live)) {
-            $type = 1;
-            if ($video === '') {
-                $video = $live[0];
-            }
+        if ($type === 3 || (count($live) > 1) || (count($live) > 0 && count($pics) > 1)) {
+            $type = 3;
             if ($cover === '' && !empty($pics)) {
                 $cover = $pics[0];
             }
+            $video = '';
         }
 
         $result = [
@@ -202,6 +205,57 @@ class ApiParser extends BaseParser
             'source'       => '',
             'list'         => $list,
         ];
+    }
+
+    /** 从字符串或对象数组中提取 URL 列表 */
+    private static function extractUrls($val)
+    {
+        if (is_string($val) && preg_match('#^https?://#i', $val)) {
+            return [$val];
+        }
+        if (!is_array($val)) {
+            return [];
+        }
+        $out = [];
+        foreach ($val as $item) {
+            if (is_string($item) && preg_match('#^https?://#i', $item)) {
+                $out[] = $item;
+                continue;
+            }
+            if (!is_array($item)) {
+                continue;
+            }
+            foreach (['url', 'pic', 'src', 'image', 'playAddr', 'addr'] as $k) {
+                $u = $item[$k] ?? '';
+                if (is_string($u) && preg_match('#^https?://#i', $u)) {
+                    $out[] = $u;
+                    break;
+                }
+            }
+        }
+        return array_values(array_unique($out));
+    }
+
+    /** 从对象数组的指定字段提取 URL */
+    private static function extractUrlsFromItems($val, array $keys)
+    {
+        if (!is_array($val)) {
+            return [];
+        }
+        $out = [];
+        foreach ($val as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            foreach ($keys as $k) {
+                $u = $item[$k] ?? '';
+                if (is_string($u) && preg_match('#^https?://#i', $u)) {
+                    $out[] = $u;
+                    break;
+                }
+            }
+        }
+        return array_values(array_unique($out));
     }
 
     /** 取字段：优先用映射字段名，映射为空则用默认字段名 */

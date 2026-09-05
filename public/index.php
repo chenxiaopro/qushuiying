@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260902h">
+<link rel="stylesheet" href="assets/css/style.css?v=20260905c">
 </head>
 <body>
 
@@ -90,8 +90,7 @@ $csrf = csrf_token();
     <div class="nav-right">
       <span class="balance hide" id="balance">余额：0 点</span>
       <button class="btn btn-primary btn-sm hide" id="btnRecharge" type="button">充值</button>
-      <span class="username hide" id="username"></span>
-      <button class="btn btn-ghost btn-sm hide" id="btnLogout" type="button">退出</button>
+      <button class="username hide" id="username" type="button"></button>
       <button class="btn btn-ghost btn-sm" id="btnLogin" type="button">登录</button>
       <button class="btn btn-primary btn-sm" id="btnRegister" type="button">注册</button>
     </div>
@@ -148,7 +147,7 @@ $csrf = csrf_token();
       <a class="btn btn-ghost hide" id="btnDownloadBackup" href="#">备用下载</a>
       <a class="btn btn-ghost hide" id="btnDownloadMusic" href="#">下载背景音乐</a>
       <a class="btn btn-ghost hide" id="btnDownloadLive" href="#">下载实况视频</a>
-      <button class="btn btn-primary hide" id="btnDownloadAll" type="button">打包下载图集</button>
+      <button class="btn btn-primary hide" id="btnDownloadAll" type="button">打包下载</button>
     </div>
   </div>
 
@@ -220,6 +219,74 @@ $csrf = csrf_token();
   </div>
 </div>
 <?php endif; ?>
+
+<!-- 用户抽屉 -->
+<div class="user-drawer-mask hide" id="userDrawerMask"></div>
+<aside class="user-drawer" id="userDrawer" aria-hidden="true">
+  <div class="ud-hero">
+    <div class="ud-hero-top">
+      <div class="ud-avatar" id="drawerAvatar">—</div>
+      <div class="ud-hero-info">
+        <div class="ud-name" id="drawerName">—</div>
+        <div class="ud-email" id="drawerEmailSub">未绑定邮箱</div>
+      </div>
+      <button class="ud-close" id="userDrawerClose" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="ud-points">
+      <div class="ud-point-main">
+        <span>剩余点数</span>
+        <b id="drawerPoints">0</b>
+      </div>
+      <div class="ud-point-divider"></div>
+      <div class="ud-point-sub">
+        <span>累计充值</span>
+        <b id="drawerTotalPoints">0</b>
+      </div>
+    </div>
+  </div>
+  <div class="ud-tabs">
+    <button class="ud-tab active" type="button" data-user-tab="overview">概览</button>
+    <button class="ud-tab" type="button" data-user-tab="parses">解析</button>
+    <button class="ud-tab" type="button" data-user-tab="recharges">充值</button>
+    <button class="ud-tab" type="button" data-user-tab="settings">设置</button>
+  </div>
+  <div class="ud-body">
+    <div class="user-panel" id="userPanelOverview">
+      <div class="ud-rows">
+        <div class="ud-row"><span class="ud-row-label">邮箱</span><span class="ud-row-val" id="drawerEmail">未绑定</span></div>
+        <div class="ud-row"><span class="ud-row-label">注册时间</span><span class="ud-row-val" id="drawerCreated">—</span></div>
+      </div>
+      <div class="ud-actions">
+        <button class="btn btn-primary btn-block" id="drawerRecharge" type="button">充值</button>
+        <button class="btn btn-ghost btn-block" id="drawerLogout" type="button">退出登录</button>
+      </div>
+    </div>
+    <div class="user-panel hide" id="userPanelParses">
+      <div id="drawerParseList"></div>
+      <div class="user-pager" id="drawerParsePager"></div>
+    </div>
+    <div class="user-panel hide" id="userPanelRecharges">
+      <div id="drawerRechargeList"></div>
+      <div class="user-pager" id="drawerRechargePager"></div>
+    </div>
+    <div class="user-panel hide" id="userPanelSettings">
+      <div class="ud-form-card">
+        <div class="ud-form-title">绑定邮箱</div>
+        <label class="field-label">邮箱</label>
+        <input class="field" id="drawerEmailInput" type="email" maxlength="64" placeholder="name@example.com">
+        <button class="btn btn-primary btn-block" id="drawerEmailSave" type="button">保存邮箱</button>
+      </div>
+      <div class="ud-form-card">
+        <div class="ud-form-title">修改密码</div>
+        <label class="field-label">原密码</label>
+        <input class="field" id="drawerOldPass" type="password" maxlength="32">
+        <label class="field-label">新密码</label>
+        <input class="field" id="drawerNewPass" type="password" maxlength="32" placeholder="6-32 位">
+        <button class="btn btn-primary btn-block" id="drawerPassSave" type="button">保存密码</button>
+      </div>
+    </div>
+  </div>
+</aside>
 
 <!-- 登录弹窗 -->
 <div class="modal-mask hide" id="loginModal">
@@ -316,6 +383,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260902e"></script>
+<script src="assets/js/app.js?v=20260905c"></script>
 </body>
 </html>

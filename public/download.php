@@ -38,9 +38,9 @@ if (input('batch', '') === '1') {
         http_response_code(400);
         exit('缺少图片地址');
     }
-    if (count($urls) > 30) {
+    if (count($urls) > 50) {
         http_response_code(400);
-        exit('图片数量过多');
+        exit('文件数量过多');
     }
 
     $files = [];
@@ -55,7 +55,7 @@ if (input('batch', '') === '1') {
             continue;
         }
         try {
-            $data = http_get($u, ['Referer: ' . referer_for_url($u)], 20);
+            $data = http_get($u, ['Referer: ' . referer_for_url($u)], 30);
         } catch (RuntimeException $e) {
             continue;
         }

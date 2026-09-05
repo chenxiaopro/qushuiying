@@ -41,17 +41,24 @@
   /* ---------- 用户状态 ---------- */
   var loggedIn = false;
   var points = 0;
+  var profile = { username: '', email: '', total_points: 0, created_at: '' };
 
   function refreshMe() {
     return api('me', {}, 'GET').then(function (res) {
       if (res.code === 0 && res.data && res.data.logged_in) {
         loggedIn = true;
         points = res.data.points;
-        $('username').dataset.name = res.data.username;
+        profile.username = res.data.username || '';
+        profile.email = res.data.email || '';
+        profile.total_points = res.data.total_points || 0;
+        profile.created_at = res.data.created_at || '';
+        $('username').dataset.name = profile.username;
         renderUser();
+        renderDrawerOverview();
       } else {
         loggedIn = false;
         renderUser();
+        closeUserDrawer();
       }
       return res;
     }).catch(function () { loggedIn = false; renderUser(); });
@@ -59,14 +66,15 @@
 
   function renderUser() {
     var showLogged = !loggedIn ? 'add' : 'remove';
-    ['balance', 'username', 'btnRecharge', 'btnLogout'].forEach(function (id) {
+    ['balance', 'username', 'btnRecharge'].forEach(function (id) {
       $(id).classList[showLogged]('hide');
     });
+    if ($('btnLogout')) $('btnLogout').classList.add('hide');
     ['btnLogin', 'btnRegister'].forEach(function (id) {
       $(id).classList[loggedIn ? 'add' : 'remove']('hide');
     });
     if (loggedIn) {
-      $('username').textContent = '欢迎回来：' + ($('username').dataset.name || '');
+      $('username').textContent = profile.username || $('username').dataset.name || '';
       $('balance').textContent = '余额：' + points + ' 点';
     }
   }
@@ -80,9 +88,15 @@
     });
   });
 
-  $('btnLogout').addEventListener('click', function () {
-    api('logout').then(function () { loggedIn = false; renderUser(); toast('已退出'); });
-  });
+  function doLogout() {
+    api('logout').then(function () {
+      loggedIn = false;
+      renderUser();
+      closeUserDrawer();
+      toast('已退出');
+    });
+  }
+  if ($('btnLogout')) $('btnLogout').addEventListener('click', doLogout);
 
   /* 弹窗内切换登录/注册 */
   document.querySelectorAll('[data-switch]').forEach(function (el) {
@@ -112,10 +126,7 @@
       .then(function (res) {
         if (res.code === 0) {
           hideModal('loginModal');
-          points = res.data.points;
-          $('username').dataset.name = res.data.username;
-          loggedIn = true;
-          renderUser();
+          refreshMe();
           toast('登录成功');
         } else { toast(res.msg); }
       })
@@ -199,6 +210,7 @@
         renderResult(res.data);
         points = res.data.points_left;
         $('balance').textContent = '余额：' + points + ' 点';
+        if ($('drawerPoints')) $('drawerPoints').textContent = points;
         toast('解析成功，消耗 ' + res.data.cost + ' 点');
       } else {
         toast(res.msg);
@@ -245,10 +257,30 @@
     var type = parseInt(r.type, 10) || 1;
     var images = Array.isArray(r.images) ? r.images.filter(Boolean) : [];
     var live = Array.isArray(r.live) ? r.live.filter(Boolean) : [];
-    var videoUrl = String(r.video_url || '') || (live.length ? live[0] : '');
-    var isImages = (type === 2 || type === 3) && images.length > 0 && !videoUrl;
+    var isLiveAlbum = type === 3 || live.length > 1 || (live.length > 0 && images.length > 1);
+    var videoUrl = isLiveAlbum ? '' : (String(r.video_url || '') || (live.length === 1 && images.length <= 1 ? live[0] : ''));
+    var isImages = (type === 2 || isLiveAlbum) && (images.length > 0 || live.length > 0) && !videoUrl;
     var baseName = (r.title || r.platform_name || 'download').replace(/[\/\\:*?"<>|]/g, '_');
-    currentImages = isImages ? images.slice() : [];
+    var liveItems = [];
+    if (isLiveAlbum) {
+      var n = Math.max(images.length, live.length);
+      for (var i = 0; i < n; i++) {
+        liveItems.push({
+          image: images[i] || '',
+          live: live[i] || '',
+          poster: images[i] || r.cover || images[0] || ''
+        });
+      }
+    }
+    currentImages = [];
+    if (isLiveAlbum) {
+      liveItems.forEach(function (it) {
+        if (it.live) currentImages.push(it.live);
+        if (it.image) currentImages.push(it.image);
+      });
+    } else if (isImages) {
+      currentImages = images.slice();
+    }
     currentBaseName = baseName;
 
     $('platformBadge').textContent = r.platform_name || '';
@@ -299,26 +331,45 @@
     var btnAll = $('btnDownloadAll');
     var card = $('resultCard');
 
+    var liveWrap = $('liveWrap');
+    if (liveWrap) liveWrap.classList.add('hide');
+
     if (isImages) {
-      // 图集/实况：图片在上，信息在下
       card.classList.add('is-images');
       v.classList.add('hide');
       v.removeAttribute('src');
       v.removeAttribute('poster');
-      var liveWrap = $('liveWrap');
-      if (liveWrap) liveWrap.classList.add('hide');
-      imgWrap.innerHTML = images.map(function (src, i) {
-        var ext = imgExt(src);
-        return '<div class="img-item">' +
-          '<img src="' + esc(src) + '" alt="图片 ' + (i + 1) + '" loading="lazy" onclick="window.open(this.src)">' +
-          '<a class="img-download" href="' + dlProxy(src, baseName + '-' + (i + 1) + '.' + ext) + '">下载</a>' +
-          '</div>';
-      }).join('');
+      if (isLiveAlbum) {
+        imgWrap.innerHTML = liveItems.map(function (it, i) {
+          var idx = i + 1;
+          if (it.live) {
+            return '<div class="img-item is-live">' +
+              '<span class="live-badge">实况</span>' +
+              '<video src="' + esc(streamProxy(it.live)) + '" poster="' + esc(it.poster) + '" muted loop playsinline preload="none"></video>' +
+              '<a class="img-download" href="' + dlProxy(it.live, baseName + '-' + idx + '-实况.mp4') + '">下载实况</a>' +
+              '</div>';
+          }
+          var src = it.image || it.poster;
+          var ext = imgExt(src);
+          return '<div class="img-item">' +
+            '<img src="' + esc(src) + '" alt="图片 ' + idx + '" loading="lazy" onclick="window.open(this.src)">' +
+            '<a class="img-download" href="' + dlProxy(src, baseName + '-' + idx + '.' + ext) + '">下载</a>' +
+            '</div>';
+        }).join('');
+        bindLivePreview(imgWrap);
+      } else {
+        imgWrap.innerHTML = images.map(function (src, i) {
+          var ext = imgExt(src);
+          return '<div class="img-item">' +
+            '<img src="' + esc(src) + '" alt="图片 ' + (i + 1) + '" loading="lazy" onclick="window.open(this.src)">' +
+            '<a class="img-download" href="' + dlProxy(src, baseName + '-' + (i + 1) + '.' + ext) + '">下载</a>' +
+            '</div>';
+        }).join('');
+      }
       imgWrap.classList.remove('hide');
       btnDownload.classList.add('hide');
       btnDownload.removeAttribute('href');
     } else {
-      // 视频：信息在上，视频在下
       card.classList.remove('is-images');
       imgWrap.innerHTML = '';
       imgWrap.classList.add('hide');
@@ -345,8 +396,7 @@
       btnBackup.classList.add('hide');
     }
 
-    // 实况视频下载（抖音 Live Photo 等）
-    if (live.length && live[0] !== videoUrl) {
+    if (!isLiveAlbum && live.length === 1 && live[0] !== videoUrl) {
       btnLive.href = dlProxy(live[0], baseName + '-实况.mp4');
       btnLive.classList.remove('hide');
     } else {
@@ -354,8 +404,8 @@
       btnLive.classList.add('hide');
     }
 
-    // 全部下载（图集多张时）
-    if (isImages && images.length > 1) {
+    if (isImages && currentImages.length > 1) {
+      btnAll.textContent = isLiveAlbum ? '打包下载实况' : '打包下载图集';
       btnAll.classList.remove('hide');
     } else {
       btnAll.classList.add('hide');
@@ -363,6 +413,19 @@
 
     $('resultSection').hidden = false;
     $('resultSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function bindLivePreview(wrap) {
+    wrap.querySelectorAll('.img-item.is-live video').forEach(function (el) {
+      var play = function () { el.play().catch(function () {}); };
+      var stop = function () { el.pause(); el.currentTime = 0; };
+      el.addEventListener('mouseenter', play);
+      el.addEventListener('mouseleave', stop);
+      el.addEventListener('click', function () {
+        if (el.paused) play();
+        else stop();
+      });
+    });
   }
 
   function batchDownload(urls, name) {
@@ -568,6 +631,7 @@
         points = res.data.points_left;
         $('balance').textContent = '余额：' + points + ' 点';
         $('cardInput').value = '';
+        refreshMe();
         toast('充值成功，到账 ' + res.data.points + ' 点');
       } else { toast(res.msg); }
     });
@@ -627,6 +691,171 @@
     setTimeout(function () { showModal('announcementModal'); }, 300);
   } else if (wechatModal && wechatUnclosed()) {
     setTimeout(function () { showModal('wechatModal'); }, 300);
+  }
+
+  /* ---------- 用户抽屉 ---------- */
+  var parsePage = 1;
+  var rechargePage = 1;
+  var loadedParsePage = 0;
+  var loadedRechargePage = 0;
+
+  function openUserDrawer() {
+    if (!loggedIn) { toast('请先登录'); showModal('loginModal'); return; }
+    $('userDrawer').classList.add('is-open');
+    $('userDrawer').setAttribute('aria-hidden', 'false');
+    $('userDrawerMask').classList.remove('hide');
+    refreshMe();
+    switchUserTab('overview');
+  }
+
+  function closeUserDrawer() {
+    if (!$('userDrawer')) return;
+    $('userDrawer').classList.remove('is-open');
+    $('userDrawer').setAttribute('aria-hidden', 'true');
+    $('userDrawerMask').classList.add('hide');
+  }
+
+  function renderDrawerOverview() {
+    if (!$('drawerName')) return;
+    var uname = profile.username || '';
+    var initial = uname ? Array.from(uname)[0].toUpperCase() : '—';
+    if ($('drawerAvatar')) $('drawerAvatar').textContent = initial;
+    $('drawerName').textContent = profile.username || '—';
+    if ($('drawerEmailSub')) $('drawerEmailSub').textContent = profile.email || '未绑定邮箱';
+    $('drawerPoints').textContent = points;
+    $('drawerTotalPoints').textContent = profile.total_points || 0;
+    $('drawerEmail').textContent = profile.email || '未绑定';
+    $('drawerCreated').textContent = profile.created_at || '—';
+    if ($('drawerEmailInput') && profile.email) $('drawerEmailInput').value = profile.email;
+  }
+
+  function switchUserTab(name) {
+    document.querySelectorAll('.ud-tab').forEach(function (t) {
+      t.classList.toggle('active', t.getAttribute('data-user-tab') === name);
+    });
+    ['overview', 'parses', 'recharges', 'settings'].forEach(function (key) {
+      var el = $('userPanel' + key.charAt(0).toUpperCase() + key.slice(1));
+      if (el) el.classList.toggle('hide', key !== name);
+    });
+    if (name === 'parses') loadMyParses(loadedParsePage ? parsePage : 1);
+    if (name === 'recharges') loadMyRecharges(loadedRechargePage ? rechargePage : 1);
+  }
+
+  function renderPager(el, page, pages, onPage) {
+    if (!el) return;
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<button class="btn btn-ghost btn-sm" type="button" ' + (page <= 1 ? 'disabled' : '') + ' data-p="' + (page - 1) + '">上一页</button>' +
+      '<span class="user-record-meta">' + page + ' / ' + pages + '</span>' +
+      '<button class="btn btn-ghost btn-sm" type="button" ' + (page >= pages ? 'disabled' : '') + ' data-p="' + (page + 1) + '">下一页</button>';
+    el.querySelectorAll('button[data-p]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        onPage(parseInt(b.getAttribute('data-p'), 10));
+      });
+    });
+  }
+
+  function loadMyParses(page) {
+    parsePage = page || 1;
+    api('my_parses', { page: parsePage }, 'GET').then(function (res) {
+      if (res.code === 401) { toast(res.msg); doLogout(); return; }
+      if (res.code !== 0) { toast(res.msg); return; }
+      loadedParsePage = res.data.page;
+      parsePage = res.data.page;
+      var list = res.data.list || [];
+      if (!list.length) {
+        $('drawerParseList').innerHTML = '<div class="user-empty">暂无解析记录</div>';
+      } else {
+        $('drawerParseList').innerHTML = list.map(function (it) {
+          return '<div class="user-record">' +
+            '<div class="user-record-title">' + esc(it.title || '无标题') + '</div>' +
+            '<div class="user-record-meta"><span>' + esc(it.platform || '-') + '</span><span>消耗 ' + esc(it.cost) + ' 点</span><span>' + esc(it.created_at) + '</span></div>' +
+            '</div>';
+        }).join('');
+      }
+      renderPager($('drawerParsePager'), res.data.page, res.data.pages, loadMyParses);
+    });
+  }
+
+  function rechargeStatusText(it) {
+    if (it.kind === 'card') return '卡密到账';
+    if (it.status === 1) return '已支付';
+    if (it.status === 2) return '已关闭';
+    return '待支付';
+  }
+
+  function payTypeText(t) {
+    return { alipay: '支付宝', wxpay: '微信', alipay_f2f: '支付宝当面付', card: '卡密' }[t] || t || '-';
+  }
+
+  function loadMyRecharges(page) {
+    rechargePage = page || 1;
+    api('my_recharges', { page: rechargePage }, 'GET').then(function (res) {
+      if (res.code === 401) { toast(res.msg); doLogout(); return; }
+      if (res.code !== 0) { toast(res.msg); return; }
+      loadedRechargePage = res.data.page;
+      rechargePage = res.data.page;
+      var list = res.data.list || [];
+      if (!list.length) {
+        $('drawerRechargeList').innerHTML = '<div class="user-empty">暂无充值记录</div>';
+      } else {
+        $('drawerRechargeList').innerHTML = list.map(function (it) {
+          return '<div class="user-record">' +
+            '<div class="user-record-title">' + esc(it.title) + '</div>' +
+            '<div class="user-record-meta"><span>' + esc(payTypeText(it.pay_type)) + '</span><span>' + esc(rechargeStatusText(it)) + '</span><span>+' + esc(it.points) + ' 点</span><span>' + esc(it.created_at) + '</span></div>' +
+            '</div>';
+        }).join('');
+      }
+      renderPager($('drawerRechargePager'), res.data.page, res.data.pages, loadMyRecharges);
+    });
+  }
+
+  if ($('username')) {
+    $('username').addEventListener('click', function () { openUserDrawer(); });
+  }
+  if ($('userDrawerClose')) $('userDrawerClose').addEventListener('click', closeUserDrawer);
+  if ($('userDrawerMask')) $('userDrawerMask').addEventListener('click', closeUserDrawer);
+  if ($('drawerLogout')) $('drawerLogout').addEventListener('click', doLogout);
+  if ($('drawerRecharge')) {
+    $('drawerRecharge').addEventListener('click', function () {
+      closeUserDrawer();
+      openRecharge();
+    });
+  }
+  document.querySelectorAll('.ud-tab').forEach(function (t) {
+    t.addEventListener('click', function () { switchUserTab(t.getAttribute('data-user-tab')); });
+  });
+  if ($('drawerEmailSave')) {
+    $('drawerEmailSave').addEventListener('click', function () {
+      var btn = $('drawerEmailSave');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      api('profile_email', { email: $('drawerEmailInput').value.trim() }).then(function (res) {
+        if (res.code === 0) {
+          profile.email = res.data.email;
+          renderDrawerOverview();
+          toast('邮箱已保存');
+        } else { toast(res.msg); }
+      }).then(function () { btn.disabled = false; });
+    });
+  }
+  if ($('drawerPassSave')) {
+    $('drawerPassSave').addEventListener('click', function () {
+      var btn = $('drawerPassSave');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      api('profile_password', {
+        old_password: $('drawerOldPass').value,
+        new_password: $('drawerNewPass').value
+      }).then(function (res) {
+        if (res.code === 0) {
+          $('drawerOldPass').value = '';
+          $('drawerNewPass').value = '';
+          toast('密码已修改');
+        } else { toast(res.msg); }
+      }).then(function () { btn.disabled = false; });
+    });
   }
 
   refreshMe();

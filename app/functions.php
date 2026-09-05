@@ -425,7 +425,7 @@ function img_ext_from_url($url)
 {
     $path = parse_url($url, PHP_URL_PATH) ?: '/';
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true)) {
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'mp4', 'mov', 'webm'], true)) {
         $ext = 'jpg';
     }
     return $ext === 'jpeg' ? 'jpg' : $ext;
