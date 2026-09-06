@@ -137,11 +137,12 @@
         if (!d.list.length) { $('usersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
         else {
           $('usersTable').innerHTML =
-            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>' +
             d.list.map(function (u) {
               return '<tr>' +
                 '<td>' + u.id + '</td>' +
                 '<td>' + esc(u.username) + '</td>' +
+                '<td>' + esc(u.email || '未绑定') + '</td>' +
                 '<td><b>' + u.points + '</b></td>' +
                 '<td>' + u.total_points + '</td>' +
                 '<td>' + (u.status == 1 ? '<span class="badge-ok">正常</span>' : '<span class="badge-off">禁用</span>') + '</td>' +

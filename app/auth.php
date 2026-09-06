@@ -59,7 +59,7 @@ function current_user()
     }
     static $cache = [];
     if (!isset($cache[$id])) {
-        $cache[$id] = DB::one('SELECT id,username,points,total_points,status,created_at FROM users WHERE id=?', [$id]);
+        $cache[$id] = DB::one('SELECT id,username,email,points,total_points,status,created_at FROM users WHERE id=?', [$id]);
     }
     return $cache[$id];
 }

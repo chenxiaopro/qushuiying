@@ -9,7 +9,11 @@
  *   POST parse         解析去水印（消耗点数）
  *   POST pay_create    创建充值订单（易支付/支付宝当面付）
  *   POST pay_query     查询订单支付状态
- *   POST recharge_card 卡密充值
+ *   POST recharge_card    卡密充值
+ *   POST profile_email    绑定/更换邮箱
+ *   POST profile_password 修改密码
+ *   GET  my_parses        本人解析记录
+ *   GET  my_recharges     本人充值记录
  */
 
 require_once __DIR__ . '/../app/init.php';
@@ -19,7 +23,7 @@ require_once __DIR__ . '/../app/payment/AlipayF2F.php';
 
 try {
     $action = input('action', '');
-    $csrfSkip = ['me', 'parse_types'];
+    $csrfSkip = ['me', 'parse_types', 'my_parses', 'my_recharges'];
     $needCsrf = !in_array($action, $csrfSkip, true)
         && $_SERVER['REQUEST_METHOD'] !== 'GET';
     if ($needCsrf) {
@@ -55,6 +59,18 @@ try {
             break;
         case 'recharge_card':
             api_recharge_card();
+            break;
+        case 'profile_email':
+            api_profile_email();
+            break;
+        case 'profile_password':
+            api_profile_password();
+            break;
+        case 'my_parses':
+            api_my_parses();
+            break;
+        case 'my_recharges':
+            api_my_recharges();
             break;
         default:
             fail('未知操作', 404);
@@ -145,7 +161,10 @@ function api_me()
         $data['logged_in'] = true;
         $data['id'] = (int)$u['id'];
         $data['username'] = $u['username'];
+        $data['email'] = (string)($u['email'] ?? '');
         $data['points'] = (int)$u['points'];
+        $data['total_points'] = (int)($u['total_points'] ?? 0);
+        $data['created_at'] = (string)($u['created_at'] ?? '');
     } elseif ($u && (int)$u['status'] !== 1) {
         unset($_SESSION['user_id']);
     }
@@ -326,5 +345,105 @@ function api_recharge_card()
         }
         throw $e;
     }
+}
+
+function api_profile_email()
+{
+    $u = require_login();
+    $email = strtolower(trim((string)input('email', '')));
+    if ($email === '' || mb_strlen($email) > 64 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        fail('邮箱格式不正确');
+    }
+    $exists = DB::one('SELECT id FROM users WHERE email=? AND id<>?', [$email, $u['id']]);
+    if ($exists) {
+        fail('该邮箱已被使用');
+    }
+    DB::execute('UPDATE users SET email=? WHERE id=?', [$email, $u['id']]);
+    ok(['email' => $email]);
+}
+
+function api_profile_password()
+{
+    $u = require_login();
+    $old = (string)input('old_password', '');
+    $new = (string)input('new_password', '');
+    if (mb_strlen($new) < 6 || mb_strlen($new) > 32) {
+        fail('密码长度需为 6-32 位');
+    }
+    $row = DB::one('SELECT password FROM users WHERE id=?', [$u['id']]);
+    if (!$row || !password_verify($old, $row['password'])) {
+        fail('原密码错误');
+    }
+    DB::execute('UPDATE users SET password=? WHERE id=?', [password_hash($new, PASSWORD_DEFAULT), $u['id']]);
+    ok(['msg' => '密码已修改']);
+}
+
+function api_my_parses()
+{
+    $u = require_login();
+    $page = max(1, (int)input('page', 1));
+    $pageSize = 10;
+    $total = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE user_id=?', [$u['id']]);
+    $pages = max(1, (int)ceil($total / $pageSize));
+    if ($page > $pages) {
+        $page = $pages;
+    }
+    $offset = ($page - 1) * $pageSize;
+    $rows = DB::all(
+        'SELECT id, platform, title, cost, created_at FROM parse_logs WHERE user_id=? ORDER BY id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize,
+        [$u['id']]
+    );
+    ok(['list' => $rows, 'total' => $total, 'page' => $page, 'pages' => $pages]);
+}
+
+function api_my_recharges()
+{
+    $u = require_login();
+    $page = max(1, (int)input('page', 1));
+    $pageSize = 10;
+    $orders = DB::all(
+        'SELECT order_sn AS title, amount, points, status, pay_type, created_at FROM orders WHERE user_id=?',
+        [$u['id']]
+    );
+    $cards = DB::all(
+        'SELECT card_no AS title, 0 AS amount, points, 1 AS status, used_at AS created_at FROM cards WHERE used_by=? AND status=1',
+        [$u['id']]
+    );
+    $list = [];
+    foreach ($orders as $row) {
+        $list[] = [
+            'kind'       => 'order',
+            'title'      => (string)$row['title'],
+            'amount'     => (string)$row['amount'],
+            'points'     => (int)$row['points'],
+            'status'     => (int)$row['status'],
+            'pay_type'   => (string)($row['pay_type'] ?? ''),
+            'created_at' => (string)$row['created_at'],
+        ];
+    }
+    foreach ($cards as $row) {
+        $no = (string)$row['title'];
+        $tail = mb_substr($no, -4);
+        $mask = str_repeat('*', max(0, mb_strlen($no) - 4)) . $tail;
+        $list[] = [
+            'kind'       => 'card',
+            'title'      => $mask,
+            'amount'     => '0.00',
+            'points'     => (int)$row['points'],
+            'status'     => 1,
+            'pay_type'   => 'card',
+            'created_at' => (string)($row['created_at'] ?? ''),
+        ];
+    }
+    usort($list, function ($a, $b) {
+        return strcmp($b['created_at'], $a['created_at']);
+    });
+    $total = count($list);
+    $pages = max(1, (int)ceil($total / $pageSize));
+    if ($page > $pages) {
+        $page = $pages;
+    }
+    $slice = array_slice($list, ($page - 1) * $pageSize, $pageSize);
+    ok(['list' => $slice, 'total' => $total, 'page' => $page, 'pages' => $pages]);
 }
 
