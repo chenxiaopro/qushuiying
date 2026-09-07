@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260906a">
+<link rel="stylesheet" href="assets/css/style.css?v=20260906b">
 </head>
 <body>
 
@@ -109,7 +109,6 @@ $csrf = csrf_token();
     <p class="hero-desc"><?= htmlspecialchars($siteDesc) ?></p>
 
     <div class="parse-box">
-      <div class="parse-box-kicker">一键解析</div>
       <div class="parse-box-title">粘贴分享内容，一键去水印</div>
       <div class="parse-input-wrap">
         <textarea id="txt" class="parse-input" rows="4" placeholder="粘贴抖音 / 快手 / 小红书等 App 内复制的分享内容或链接"></textarea>
@@ -169,10 +168,6 @@ $csrf = csrf_token();
 </section>
 
 <section class="container feature-section">
-  <div class="feature-head">
-    <div class="feature-kicker">为什么选我们</div>
-    <div class="feature-title">支持视频、图集与实况</div>
-  </div>
   <div class="feature-grid">
     <div class="feature-item">
       <div class="feature-icon">1</div>
@@ -410,6 +405,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260906a"></script>
+<script src="assets/js/app.js?v=20260906b"></script>
 </body>
 </html>
