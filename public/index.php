@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260905e">
+<link rel="stylesheet" href="assets/css/style.css?v=20260906a">
 </head>
 <body>
 
@@ -109,6 +109,7 @@ $csrf = csrf_token();
     <p class="hero-desc"><?= htmlspecialchars($siteDesc) ?></p>
 
     <div class="parse-box">
+      <div class="parse-box-kicker">一键解析</div>
       <div class="parse-box-title">粘贴分享内容，一键去水印</div>
       <div class="parse-input-wrap">
         <textarea id="txt" class="parse-input" rows="4" placeholder="粘贴抖音 / 快手 / 小红书等 App 内复制的分享内容或链接"></textarea>
@@ -168,6 +169,10 @@ $csrf = csrf_token();
 </section>
 
 <section class="container feature-section">
+  <div class="feature-head">
+    <div class="feature-kicker">为什么选我们</div>
+    <div class="feature-title">支持视频、图集与实况</div>
+  </div>
   <div class="feature-grid">
     <div class="feature-item">
       <div class="feature-icon">1</div>
@@ -201,7 +206,10 @@ $csrf = csrf_token();
 <!-- 网站公告弹窗 -->
 <div class="modal-mask hide" id="announcementModal">
   <div class="modal">
-    <div class="modal-title">网站公告</div>
+    <div class="modal-head">
+      <div class="modal-title">网站公告</div>
+      <button class="modal-close" type="button" data-modal-close="announcementModal" aria-label="关闭">×</button>
+    </div>
     <div class="announcement-modal-body"><?= nl2br(htmlspecialchars($announcement)) ?></div>
     <button class="btn btn-primary btn-block" id="announcementCloseBtn" style="margin-top:16px">我知道了</button>
   </div>
@@ -212,7 +220,10 @@ $csrf = csrf_token();
 <!-- 公众号引导弹窗 -->
 <div class="modal-mask hide" id="wechatModal">
   <div class="modal wechat-modal">
-    <div class="modal-title">关注公众号</div>
+    <div class="modal-head">
+      <div class="modal-title">关注公众号</div>
+      <button class="modal-close" type="button" data-modal-close="wechatModal" aria-label="关闭">×</button>
+    </div>
     <?php if ($wechatQrcode): ?>
     <div class="wechat-qrcode"><img src="<?= htmlspecialchars($wechatQrcode) ?>" alt="公众号二维码"></div>
     <?php endif; ?>
@@ -298,7 +309,10 @@ $csrf = csrf_token();
 <!-- 登录弹窗 -->
 <div class="modal-mask hide" id="loginModal">
   <div class="modal">
-    <div class="modal-title">登录</div>
+    <div class="modal-head">
+      <div class="modal-title">登录</div>
+      <button class="modal-close" type="button" data-modal-close="loginModal" aria-label="关闭">×</button>
+    </div>
     <label class="field-label">用户名</label>
     <input class="field" id="loginUser" maxlength="20">
     <label class="field-label">密码</label>
@@ -314,7 +328,10 @@ $csrf = csrf_token();
 <!-- 注册弹窗 -->
 <div class="modal-mask hide" id="registerModal">
   <div class="modal">
-    <div class="modal-title">注册</div>
+    <div class="modal-head">
+      <div class="modal-title">注册</div>
+      <button class="modal-close" type="button" data-modal-close="registerModal" aria-label="关闭">×</button>
+    </div>
     <?php if ($registerPoints > 0): ?>
     <div class="register-bonus">注册即送 <b><?= $registerPoints ?></b> 点体验点数</div>
     <?php endif; ?>
@@ -330,7 +347,10 @@ $csrf = csrf_token();
 <!-- 充值弹窗 -->
 <div class="modal-mask hide" id="rechargeModal">
   <div class="modal modal-lg">
-    <div class="modal-title">充值中心</div>
+    <div class="modal-head">
+      <div class="modal-title">充值中心</div>
+      <button class="modal-close" type="button" data-modal-close="rechargeModal" aria-label="关闭">×</button>
+    </div>
 
     <div class="recharge-tabs">
       <?php if ($onlinePayEnabled): ?><span class="tab active" data-tab="pay">在线支付</span><?php endif; ?>
@@ -390,6 +410,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260905e"></script>
+<script src="assets/js/app.js?v=20260906a"></script>
 </body>
 </html>

@@ -114,6 +114,13 @@
   document.querySelectorAll('.modal-mask').forEach(function (m) {
     m.addEventListener('click', function (e) { if (e.target === m) m.classList.add('hide'); });
   });
+  document.querySelectorAll('[data-modal-close]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.getAttribute('data-modal-close');
+      if (id === 'announcementModal' || id === 'wechatModal') return;
+      if (id) hideModal(id);
+    });
+  });
 
   /* ---------- 登录 / 注册 ---------- */
   $('loginSubmit').addEventListener('click', function () {
@@ -496,6 +503,8 @@
         ? '<img src="' + esc(cover) + '" alt="" loading="lazy" onclick="window.open(this.src)">'
         : '<div class="list-cover-empty">无封面</div>';
 
+      var desc = String(it.desc || '').trim();
+      var copyText = [title, desc && normalizeText(desc) !== normalizeText(title) ? desc : ''].filter(Boolean).join('\n');
       var actions = '';
       if (isImages && it.images.length > 1) {
         actions += '<button class="btn btn-primary btn-sm list-btn" data-batch="' + i + '">打包下载图集</button>';
@@ -503,6 +512,9 @@
         actions += '<a class="btn btn-primary btn-sm list-btn" href="' + dlProxy(it.video_url, baseName + '.mp4') + '">下载视频</a>';
       } else if (it.images && it.images.length) {
         actions += '<a class="btn btn-primary btn-sm list-btn" href="' + dlProxy(it.images[0], baseName + '.jpg') + '">下载图片</a>';
+      }
+      if (copyText) {
+        actions += '<button class="btn btn-ghost btn-sm list-btn" data-copy="' + i + '">复制文案</button>';
       }
 
       return '<div class="list-item">' +
@@ -521,6 +533,19 @@
         var it = list[idx];
         if (!it || !it.images || !it.images.length) return;
         batchDownload(it.images, String(it.title || '图集').replace(/[\/\\:*?"<>|]/g, '_'));
+      });
+    });
+    grid.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idx = parseInt(this.getAttribute('data-copy'), 10);
+        var it = list[idx];
+        if (!it) return;
+        var t = String(it.title || '').trim();
+        var d = String(it.desc || '').trim();
+        var text = [t, d && normalizeText(d) !== normalizeText(t) ? d : ''].filter(Boolean).join('\n');
+        if (!text) { toast('暂无可复制文案'); return; }
+        copyToClipboard(text).then(function () { toast('文案已复制'); })
+          .catch(function () { toast('复制失败，请手动复制'); });
       });
     });
 
@@ -719,10 +744,16 @@
 
   if (announcementModal) {
     $('announcementCloseBtn').addEventListener('click', closeAnnouncementModal);
+    announcementModal.querySelectorAll('[data-modal-close="announcementModal"]').forEach(function (el) {
+      el.addEventListener('click', closeAnnouncementModal);
+    });
     announcementModal.addEventListener('click', function (e) { if (e.target === this) closeAnnouncementModal(); });
   }
   if (wechatModal) {
     $('wechatCloseBtn').addEventListener('click', closeWechatModal);
+    wechatModal.querySelectorAll('[data-modal-close="wechatModal"]').forEach(function (el) {
+      el.addEventListener('click', closeWechatModal);
+    });
     wechatModal.addEventListener('click', function (e) { if (e.target === this) closeWechatModal(); });
   }
 
