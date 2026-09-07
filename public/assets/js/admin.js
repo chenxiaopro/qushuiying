@@ -152,6 +152,7 @@
                   '<button class="btn btn-sm" data-user-action="add" data-id="' + u.id + '">加点</button> ' +
                   '<button class="btn btn-sm" data-user-action="deduct" data-id="' + u.id + '">扣点</button> ' +
                   '<button class="btn btn-sm" data-user-action="toggle" data-id="' + u.id + '">' + (u.status == 1 ? '禁用' : '启用') + '</button> ' +
+                  '<button class="btn btn-sm" data-user-action="email" data-id="' + u.id + '" data-email="' + esc(u.email || '') + '">改邮箱</button> ' +
                   '<button class="btn btn-sm" data-user-action="reset" data-id="' + u.id + '">重置密码</button>' +
                 '</td></tr>';
             }).join('') + '</tbody></table></div>';
@@ -177,16 +178,22 @@
           openUserModal(id, act === 'add' ? '增加点数' : '扣除点数', 'points');
         } else if (act === 'reset') {
           openUserModal(id, '重置密码', 'password');
+        } else if (act === 'email') {
+          openUserModal(id, '修改邮箱', 'email', b.getAttribute('data-email') || '');
         }
       });
     });
   }
 
-  function openUserModal(id, title, type) {
+  function openUserModal(id, title, type, extra) {
     $('userModalTitle').textContent = title;
     if (type === 'points') {
       $('userModalBody').innerHTML =
         '<label>点数</label><input class="field" id="userModalVal" type="number" min="1">' +
+        '<button class="btn btn-primary btn-block" style="margin-top:16px" id="userModalOk">确定</button>';
+    } else if (type === 'email') {
+      $('userModalBody').innerHTML =
+        '<label>邮箱（留空则解绑）</label><input class="field" id="userModalVal" type="email" maxlength="64" value="' + esc(extra || '') + '">' +
         '<button class="btn btn-primary btn-block" style="margin-top:16px" id="userModalOk">确定</button>';
     } else {
       $('userModalBody').innerHTML =
@@ -196,9 +203,11 @@
     $('userModal').classList.remove('hide');
     $('userModalOk').addEventListener('click', function () {
       var val = $('userModalVal').value.trim();
-      if (!val) { toast('请输入数值'); return; }
-      var action = type === 'points' ? (title.indexOf('增加') >= 0 ? 'add_points' : 'deduct_points') : 'reset_pwd';
-      adminApi('user_action', { id: id, sub: action, points: val, password: val }).then(function (res) {
+      if (type !== 'email' && !val) { toast('请输入数值'); return; }
+      var action = 'reset_pwd';
+      if (type === 'points') action = title.indexOf('增加') >= 0 ? 'add_points' : 'deduct_points';
+      if (type === 'email') action = 'set_email';
+      adminApi('user_action', { id: id, sub: action, points: val, password: val, email: val }).then(function (res) {
         if (!checkAuth(res)) return;
         if (res.code !== 0) { toast(res.msg); return; }
         $('userModal').classList.add('hide');

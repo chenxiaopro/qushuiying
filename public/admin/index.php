@@ -512,6 +512,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260907a"></script>
+<script src="../assets/js/admin.js?v=20260907b"></script>
 </body>
 </html>

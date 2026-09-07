@@ -6,7 +6,7 @@
  *   POST logout             退出
  *   GET  stats              仪表盘统计
  *   GET  users?page=&q=     用户列表
- *   POST user_action        用户操作(加点/扣点/禁用/重置密码)
+ *   POST user_action        用户操作(加点/扣点/禁用/重置密码/改邮箱)
  *   GET  orders?page=&status= 订单列表
  *   GET  logs?page=&q=      解析记录
  *   GET  cards?page=        卡密列表
@@ -228,6 +228,23 @@ function admin_user_action()
             }
             DB::execute('UPDATE users SET password=? WHERE id=?', [password_hash($pwd, PASSWORD_DEFAULT), $id]);
             ok();
+            break;
+        case 'set_email':
+            $email = strtolower(trim((string)input('email', '')));
+            if ($email === '') {
+                DB::execute('UPDATE users SET email=NULL WHERE id=?', [$id]);
+                ok(['email' => '']);
+                break;
+            }
+            if (mb_strlen($email) > 64 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                fail('邮箱格式不正确');
+            }
+            $exists = DB::one('SELECT id FROM users WHERE email=? AND id<>?', [$email, $id]);
+            if ($exists) {
+                fail('该邮箱已被使用');
+            }
+            DB::execute('UPDATE users SET email=? WHERE id=?', [$email, $id]);
+            ok(['email' => $email]);
             break;
         default:
             fail('未知操作');
