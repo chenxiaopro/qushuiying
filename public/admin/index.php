@@ -10,14 +10,17 @@ require_once __DIR__ . '/../../app/init.php';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>后台管理 - <?= htmlspecialchars(setting('site_name', '短视频去水印')) ?></title>
-<link rel="stylesheet" href="../assets/css/admin.css?v=20260906a">
+<link rel="stylesheet" href="../assets/css/admin.css?v=20260907a">
 </head>
 <body>
 
 <!-- 登录 -->
 <div id="loginView" class="login-wrap">
   <div class="login-box">
-    <h2>后台管理登录</h2>
+    <div class="login-brand">
+      <span class="brand-logo">管</span>
+      <h2>后台管理登录</h2>
+    </div>
     <input class="field" id="adminUser" placeholder="管理员账号" maxlength="20">
     <input class="field" id="adminPass" type="password" placeholder="密码" maxlength="32">
     <button class="btn btn-primary btn-block" id="adminLoginBtn">登 录</button>
@@ -27,7 +30,7 @@ require_once __DIR__ . '/../../app/init.php';
 <!-- 主界面 -->
 <div id="appView" class="layout hide">
   <aside class="sidebar">
-    <div class="brand"><span class="brand-logo"></span>后台管理</div>
+    <div class="brand"><span class="brand-logo">管</span>后台管理</div>
     <nav class="nav-group">
       <div class="nav-title">仪表盘</div>
       <div class="nav-item active" data-page="dashboard">仪表盘</div>
@@ -509,6 +512,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260905b"></script>
+<script src="../assets/js/admin.js?v=20260907a"></script>
 </body>
 </html>
