@@ -14,12 +14,15 @@
  *   POST profile_password 修改密码
  *   GET  my_parses        本人解析记录
  *   GET  my_recharges     本人充值记录
+ *   POST wx_bind_code     生成微信绑定码
+ *   POST wx_unbind        解绑微信
  */
 
 require_once __DIR__ . '/../app/init.php';
 require_once __DIR__ . '/../app/ParserFactory.php';
 require_once __DIR__ . '/../app/payment/Epay.php';
 require_once __DIR__ . '/../app/payment/AlipayF2F.php';
+require_once __DIR__ . '/../app/WechatMp.php';
 
 try {
     $action = input('action', '');
@@ -71,6 +74,12 @@ try {
             break;
         case 'my_recharges':
             api_my_recharges();
+            break;
+        case 'wx_bind_code':
+            api_wx_bind_code();
+            break;
+        case 'wx_unbind':
+            api_wx_unbind();
             break;
         default:
             fail('未知操作', 404);
@@ -162,6 +171,9 @@ function api_me()
         $data['id'] = (int)$u['id'];
         $data['username'] = $u['username'];
         $data['email'] = (string)($u['email'] ?? '');
+        $data['wx_bound'] = trim((string)($u['wx_openid'] ?? '')) !== '';
+        $data['wxmp_enabled'] = WechatMp::enabled();
+        $data['wxmp_checkin_points'] = WechatMp::checkinPoints();
         $data['points'] = (int)$u['points'];
         $data['total_points'] = (int)($u['total_points'] ?? 0);
         $data['created_at'] = (string)($u['created_at'] ?? '');
@@ -445,5 +457,33 @@ function api_my_recharges()
     }
     $slice = array_slice($list, ($page - 1) * $pageSize, $pageSize);
     ok(['list' => $slice, 'total' => $total, 'page' => $page, 'pages' => $pages]);
+}
+
+function api_wx_bind_code()
+{
+    $u = require_login();
+    if (trim((string)($u['wx_openid'] ?? '')) !== '') {
+        fail('已绑定微信，如需换绑请先解绑');
+    }
+    if (!WechatMp::enabled()) {
+        fail('公众号签到未开启');
+    }
+    $row = WechatMp::issueBindCode((int)$u['id']);
+    ok([
+        'code'       => $row['code'],
+        'expires_at' => $row['expires_at'],
+        'wx_name'    => trim((string)setting('wechat_name', '')),
+    ]);
+}
+
+function api_wx_unbind()
+{
+    $u = require_login();
+    if (trim((string)($u['wx_openid'] ?? '')) === '') {
+        fail('尚未绑定微信');
+    }
+    DB::execute('UPDATE users SET wx_openid=NULL WHERE id=?', [(int)$u['id']]);
+    DB::execute('DELETE FROM wx_bind_codes WHERE user_id=?', [(int)$u['id']]);
+    ok(['wx_bound' => false]);
 }
 

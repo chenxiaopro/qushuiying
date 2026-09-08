@@ -137,12 +137,13 @@
         if (!d.list.length) { $('usersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
         else {
           $('usersTable').innerHTML =
-            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>微信</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>' +
             d.list.map(function (u) {
               return '<tr>' +
                 '<td>' + u.id + '</td>' +
                 '<td>' + esc(u.username) + '</td>' +
                 '<td>' + esc(u.email || '未绑定') + '</td>' +
+                '<td>' + (u.wx_bound ? '已绑定' : '未绑定') + '</td>' +
                 '<td><b>' + u.points + '</b></td>' +
                 '<td>' + u.total_points + '</td>' +
                 '<td>' + (u.status == 1 ? '<span class="badge-ok">正常</span>' : '<span class="badge-off">禁用</span>') + '</td>' +
@@ -153,6 +154,7 @@
                   '<button class="btn btn-sm" data-user-action="deduct" data-id="' + u.id + '">扣点</button> ' +
                   '<button class="btn btn-sm" data-user-action="toggle" data-id="' + u.id + '">' + (u.status == 1 ? '禁用' : '启用') + '</button> ' +
                   '<button class="btn btn-sm" data-user-action="email" data-id="' + u.id + '" data-email="' + esc(u.email || '') + '">改邮箱</button> ' +
+                  (u.wx_bound ? '<button class="btn btn-sm" data-user-action="unbindwx" data-id="' + u.id + '">解绑微信</button> ' : '') +
                   '<button class="btn btn-sm" data-user-action="reset" data-id="' + u.id + '">重置密码</button>' +
                 '</td></tr>';
             }).join('') + '</tbody></table></div>';
@@ -180,6 +182,12 @@
           openUserModal(id, '重置密码', 'password');
         } else if (act === 'email') {
           openUserModal(id, '修改邮箱', 'email', b.getAttribute('data-email') || '');
+        } else if (act === 'unbindwx') {
+          adminApi('user_action', { id: id, sub: 'unbind_wx' }).then(function (res) {
+            if (!checkAuth(res)) return;
+            if (res.code !== 0) { toast(res.msg); return; }
+            toast('已解绑微信'); loadUsers(state.page);
+          });
         }
       });
     });
@@ -398,6 +406,12 @@
       $('set_wechat_name').value = d.wechat_name;
       $('set_wechat_qrcode').value = d.wechat_qrcode;
       $('set_wechat_desc').value = d.wechat_desc;
+      $('set_wxmp_enabled').value = d.wxmp_enabled;
+      $('set_wxmp_appid').value = d.wxmp_appid;
+      $('set_wxmp_secret').value = d.wxmp_secret;
+      $('set_wxmp_token').value = d.wxmp_token;
+      $('set_wxmp_checkin_points').value = d.wxmp_checkin_points || '1';
+      if ($('wxmpCallbackUrl')) $('wxmpCallbackUrl').textContent = d.wxmp_callback || '—';
       $('set_site_version').textContent = d.site_version || '—';
       $('set_bark_enabled').value = d.bark_enabled;
       $('set_bark_server').value = d.bark_server;
@@ -432,6 +446,22 @@
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
       toast('公众号设置已保存');
+    });
+  });
+  $('saveWxmpBtn').addEventListener('click', function () {
+    adminApi('save_settings', collectSettings(
+      ['wxmp_enabled', 'wxmp_appid', 'wxmp_secret', 'wxmp_token', 'wxmp_checkin_points']
+    )).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast('签到配置已保存');
+    });
+  });
+  $('wxmpMenuBtn').addEventListener('click', function () {
+    adminApi('wxmp_menu', {}).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast((res.data && res.data.msg) || '菜单已创建');
     });
   });
   $('saveShareBtn').addEventListener('click', function () {

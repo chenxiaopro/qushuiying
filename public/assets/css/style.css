@@ -450,7 +450,15 @@ a { color: var(--primary); text-decoration: none; }
   margin-bottom: 14px;
 }
 .ud-form-title { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+.ud-form-hint { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 6px 0 0; }
 .ud-form-card .btn { margin-top: 14px; }
+.ud-wx-code {
+  margin-top: 12px; background: #f4f7ff; border-radius: 12px; padding: 14px 12px; text-align: center;
+}
+.ud-wx-code-val {
+  font-size: 28px; font-weight: 800; letter-spacing: .28em; color: var(--primary); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ud-wx-code-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
 /* 记录列表 */
 .user-record {

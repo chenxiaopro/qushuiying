@@ -17,6 +17,7 @@
 
 require_once __DIR__ . '/../../app/init.php';
 require_once __DIR__ . '/../../app/payment/Epay.php';
+require_once __DIR__ . '/../../app/WechatMp.php';
 
 try {
     $action = input('action', '');
@@ -76,6 +77,10 @@ try {
         case 'epay_check':
             require_admin();
             ok(Epay::selfCheck());
+            break;
+        case 'wxmp_menu':
+            require_admin();
+            admin_wxmp_menu();
             break;
         case 'apis':
             require_admin();
@@ -181,10 +186,15 @@ function admin_users()
     $pages = max(1, ceil($total / $pageSize));
     $offset = ($page - 1) * $pageSize;
     $rows = DB::all(
-        'SELECT id,username,email,points,total_points,status,last_login_at,last_login_ip,created_at FROM users ' . $where .
+        'SELECT id,username,email,wx_openid,points,total_points,status,last_login_at,last_login_ip,created_at FROM users ' . $where .
         ' ORDER BY id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize,
         $params
     );
+    foreach ($rows as &$r) {
+        $r['wx_bound'] = trim((string)($r['wx_openid'] ?? '')) !== '';
+        unset($r['wx_openid']);
+    }
+    unset($r);
     ok(['list' => $rows, 'total' => $total, 'page' => $page, 'pages' => $pages]);
 }
 
@@ -228,6 +238,14 @@ function admin_user_action()
             }
             DB::execute('UPDATE users SET password=? WHERE id=?', [password_hash($pwd, PASSWORD_DEFAULT), $id]);
             ok();
+            break;
+        case 'unbind_wx':
+            if (trim((string)($u['wx_openid'] ?? '')) === '') {
+                fail('该用户未绑定微信');
+            }
+            DB::execute('UPDATE users SET wx_openid=NULL WHERE id=?', [$id]);
+            DB::execute('DELETE FROM wx_bind_codes WHERE user_id=?', [$id]);
+            ok(['wx_bound' => false]);
             break;
         case 'set_email':
             $email = strtolower(trim((string)input('email', '')));
@@ -330,17 +348,28 @@ function admin_settings_get()
              'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
                'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version',
                'bark_enabled', 'bark_server', 'bark_key', 'bark_sound', 'bark_notify_register', 'bark_notify_recharge',
-               'share_title', 'share_desc', 'share_image'];
+               'share_title', 'share_desc', 'share_image',
+               'wxmp_enabled', 'wxmp_appid', 'wxmp_secret', 'wxmp_token', 'wxmp_checkin_points'];
     $out = [];
     foreach ($keys as $k) {
         $out[$k] = setting($k);
     }
     // 开关类字段默认关闭，避免旧库无此 key 时下拉未选中导致保存校验失败
-    foreach (['wechat_enabled', 'epay_enabled', 'alipay_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge'] as $switchKey) {
+    foreach (['wechat_enabled', 'epay_enabled', 'alipay_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge', 'wxmp_enabled'] as $switchKey) {
         if ($out[$switchKey] === '' || $out[$switchKey] === null) {
             $out[$switchKey] = '0';
         }
     }
+    if ($out['wxmp_checkin_points'] === '' || $out['wxmp_checkin_points'] === null) {
+        $out['wxmp_checkin_points'] = '1';
+    }
+    $site = trim((string)cfg('site_url', ''));
+    if ($site === '') {
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443);
+        $site = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+    }
+    $out['wxmp_callback'] = rtrim($site, '/') . '/wxmp.php';
     ok($out);
 }
 
@@ -351,12 +380,19 @@ function admin_settings_save()
              'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
              'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc',
              'bark_enabled', 'bark_server', 'bark_key', 'bark_sound', 'bark_notify_register', 'bark_notify_recharge',
-             'share_title', 'share_desc', 'share_image'];
+             'share_title', 'share_desc', 'share_image',
+             'wxmp_enabled', 'wxmp_appid', 'wxmp_secret', 'wxmp_token', 'wxmp_checkin_points'];
     // 数字字段必须为合法的非负整数
-    $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'alipay_enabled', 'wechat_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge'];
+    $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'alipay_enabled', 'wechat_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge', 'wxmp_enabled', 'wxmp_checkin_points'];
     foreach ($intFields as $k) {
         if (array_key_exists($k, $_POST) && preg_match('/^\d+$/', trim((string)$_POST[$k])) !== 1) {
             fail($k . ' 必须为非负整数');
+        }
+    }
+    if (array_key_exists('wxmp_checkin_points', $_POST)) {
+        $cp = (int)$_POST['wxmp_checkin_points'];
+        if ($cp < 1 || $cp > 1000000) {
+            fail('每日签到点数需在 1-1000000 之间');
         }
     }
     foreach ($fields as $k) {
@@ -583,4 +619,17 @@ function admin_version_delete()
         set_setting('site_version', $latest['version']);
     }
     ok();
+}
+
+function admin_wxmp_menu()
+{
+    if ((int)setting('wxmp_enabled', 0) !== 1) {
+        fail('请先开启公众号签到并保存配置');
+    }
+    try {
+        WechatMp::createMenu();
+    } catch (Throwable $e) {
+        fail($e->getMessage());
+    }
+    ok(['msg' => '自定义菜单已创建，关注用户重新进入公众号后可见「每日签到」']);
 }

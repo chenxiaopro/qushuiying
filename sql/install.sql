@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `username` VARCHAR(32) NOT NULL COMMENT '用户名',
   `password` VARCHAR(255) NOT NULL COMMENT '密码(哈希)',
   `email` VARCHAR(64) NULL COMMENT '绑定邮箱',
+  `wx_openid` VARCHAR(64) NULL COMMENT '微信公众号 OpenID',
   `points` INT NOT NULL DEFAULT 0 COMMENT '剩余点数',
   `total_points` INT NOT NULL DEFAULT 0 COMMENT '累计充值点数',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1正常 0禁用',
@@ -18,7 +19,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`),
-  UNIQUE KEY `uk_email` (`email`)
+  UNIQUE KEY `uk_email` (`email`),
+  UNIQUE KEY `uk_wx_openid` (`wx_openid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
 CREATE TABLE IF NOT EXISTS `admins` (
@@ -116,6 +118,30 @@ CREATE TABLE IF NOT EXISTS `versions` (
   KEY `idx_version` (`version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本更新记录';
 
+CREATE TABLE IF NOT EXISTS `wx_bind_codes` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `code` VARCHAR(8) NOT NULL COMMENT '绑定码',
+  `expires_at` DATETIME NOT NULL,
+  `used_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_code` (`code`),
+  KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信绑定码';
+
+CREATE TABLE IF NOT EXISTS `wx_checkins` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `openid` VARCHAR(64) NOT NULL,
+  `points` INT NOT NULL DEFAULT 0,
+  `checkin_date` DATE NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_date` (`user_id`, `checkin_date`),
+  KEY `idx_openid` (`openid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信公众号签到记录';
+
 CREATE TABLE IF NOT EXISTS `settings` (
   `k` VARCHAR(64) NOT NULL,
   `v` TEXT NULL,
@@ -153,6 +179,11 @@ INSERT INTO `settings` (`k`, `v`) VALUES
 ('share_title', ''),
 ('share_desc', ''),
 ('share_image', ''),
+('wxmp_enabled', '0'),
+('wxmp_appid', ''),
+('wxmp_secret', ''),
+('wxmp_token', ''),
+('wxmp_checkin_points', '1'),
 ('site_version', 'v1.3.0')
 ON DUPLICATE KEY UPDATE `k`=`k`;
 

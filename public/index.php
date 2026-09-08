@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260906b">
+<link rel="stylesheet" href="assets/css/style.css?v=20260908a">
 </head>
 <body>
 
@@ -267,6 +267,7 @@ $csrf = csrf_token();
     <div class="user-panel" id="userPanelOverview">
       <div class="ud-rows">
         <div class="ud-row"><span class="ud-row-label">邮箱</span><span class="ud-row-val" id="drawerEmail">未绑定</span></div>
+        <div class="ud-row"><span class="ud-row-label">微信</span><span class="ud-row-val" id="drawerWx">未绑定</span></div>
         <div class="ud-row"><span class="ud-row-label">注册时间</span><span class="ud-row-val" id="drawerCreated">—</span></div>
       </div>
       <div class="ud-actions">
@@ -283,6 +284,16 @@ $csrf = csrf_token();
       <div class="user-pager" id="drawerRechargePager"></div>
     </div>
     <div class="user-panel hide" id="userPanelSettings">
+      <div class="ud-form-card" id="drawerWxCard">
+        <div class="ud-form-title">绑定微信</div>
+        <p class="ud-form-hint" id="drawerWxHint">关注公众号后发送绑定码，即可用功能栏「每日签到」领取点数。</p>
+        <div class="ud-wx-code hide" id="drawerWxCodeWrap">
+          <div class="ud-wx-code-val" id="drawerWxCode">————</div>
+          <div class="ud-wx-code-meta" id="drawerWxCodeMeta"></div>
+        </div>
+        <button class="btn btn-primary btn-block" id="drawerWxBind" type="button">生成绑定码</button>
+        <button class="btn btn-ghost btn-block hide" id="drawerWxUnbind" type="button">解绑微信</button>
+      </div>
       <div class="ud-form-card">
         <div class="ud-form-title">绑定邮箱</div>
         <label class="field-label">邮箱</label>
@@ -405,6 +416,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260906b"></script>
+<script src="assets/js/app.js?v=20260908a"></script>
 </body>
 </html>

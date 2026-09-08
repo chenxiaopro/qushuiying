@@ -41,7 +41,7 @@
   /* ---------- 用户状态 ---------- */
   var loggedIn = false;
   var points = 0;
-  var profile = { username: '', email: '', total_points: 0, created_at: '' };
+  var profile = { username: '', email: '', total_points: 0, created_at: '', wx_bound: false, wxmp_enabled: false, wxmp_checkin_points: 1 };
 
   function refreshMe() {
     return api('me', {}, 'GET').then(function (res) {
@@ -50,6 +50,9 @@
         points = res.data.points;
         profile.username = res.data.username || '';
         profile.email = res.data.email || '';
+        profile.wx_bound = !!res.data.wx_bound;
+        profile.wxmp_enabled = !!res.data.wxmp_enabled;
+        profile.wxmp_checkin_points = res.data.wxmp_checkin_points || 1;
         profile.total_points = res.data.total_points || 0;
         profile.created_at = res.data.created_at || '';
         $('username').dataset.name = profile.username;
@@ -795,8 +798,26 @@
     $('drawerPoints').textContent = points;
     $('drawerTotalPoints').textContent = profile.total_points || 0;
     $('drawerEmail').textContent = profile.email || '未绑定';
+    if ($('drawerWx')) $('drawerWx').textContent = profile.wx_bound ? '已绑定' : '未绑定';
     $('drawerCreated').textContent = profile.created_at || '—';
     if ($('drawerEmailInput') && profile.email) $('drawerEmailInput').value = profile.email;
+    renderWxBindCard();
+  }
+
+  function renderWxBindCard() {
+    var card = $('drawerWxCard');
+    if (!card) return;
+    var bound = !!profile.wx_bound;
+    var enabled = !!profile.wxmp_enabled;
+    card.classList.toggle('hide', !enabled && !bound);
+    if ($('drawerWxBind')) $('drawerWxBind').classList.toggle('hide', bound || !enabled);
+    if ($('drawerWxUnbind')) $('drawerWxUnbind').classList.toggle('hide', !bound);
+    if ($('drawerWxHint')) {
+      $('drawerWxHint').textContent = bound
+        ? '已绑定微信，可在公众号点「每日签到」领取 ' + (profile.wxmp_checkin_points || 1) + ' 点。'
+        : '关注公众号后发送绑定码，即可用功能栏「每日签到」领取点数。';
+    }
+    if (bound && $('drawerWxCodeWrap')) $('drawerWxCodeWrap').classList.add('hide');
   }
 
   function switchUserTab(name) {
@@ -907,6 +928,35 @@
           renderDrawerOverview();
           toast('邮箱已保存');
         } else { toast(res.msg); }
+      }).then(function () { btn.disabled = false; });
+    });
+  }
+  if ($('drawerWxBind')) {
+    $('drawerWxBind').addEventListener('click', function () {
+      var btn = $('drawerWxBind');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      api('wx_bind_code', {}).then(function (res) {
+        if (res.code === 401) { toast(res.msg); doLogout(); return; }
+        if (res.code !== 0) { toast(res.msg); return; }
+        $('drawerWxCode').textContent = res.data.code || '————';
+        $('drawerWxCodeMeta').textContent = '有效至 ' + (res.data.expires_at || '') + '，发给公众号即可绑定';
+        $('drawerWxCodeWrap').classList.remove('hide');
+        toast('绑定码已生成');
+      }).then(function () { btn.disabled = false; });
+    });
+  }
+  if ($('drawerWxUnbind')) {
+    $('drawerWxUnbind').addEventListener('click', function () {
+      var btn = $('drawerWxUnbind');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      api('wx_unbind', {}).then(function (res) {
+        if (res.code === 401) { toast(res.msg); doLogout(); return; }
+        if (res.code !== 0) { toast(res.msg); return; }
+        profile.wx_bound = false;
+        renderDrawerOverview();
+        toast('已解绑微信');
       }).then(function () { btn.disabled = false; });
     });
   }

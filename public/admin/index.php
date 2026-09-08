@@ -236,6 +236,43 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveWechatBtn" style="margin-top:16px">保存公众号设置</button>
       </div>
 
+      <div class="page-title">公众号签到</div>
+      <div class="card">
+        <div class="page-sub" style="margin-bottom:14px">用户在网站生成绑定码，发给公众号完成绑定后，点击自定义菜单「每日签到」领取点数。请先在微信公众平台填写下方服务器 URL 与 Token。</div>
+        <div class="form-grid">
+          <div>
+            <label>签到功能开关</label>
+            <select class="field" id="set_wxmp_enabled">
+              <option value="0">关闭</option>
+              <option value="1">开启</option>
+            </select>
+          </div>
+          <div>
+            <label>每日签到点数</label>
+            <input class="field" id="set_wxmp_checkin_points" type="number" min="1" placeholder="1">
+          </div>
+          <div>
+            <label>AppID</label>
+            <input class="field" id="set_wxmp_appid" placeholder="wx开头的 AppID">
+          </div>
+          <div>
+            <label>AppSecret</label>
+            <input class="field" id="set_wxmp_secret" placeholder="公众号开发者密码">
+          </div>
+          <div>
+            <label>Token</label>
+            <input class="field" id="set_wxmp_token" placeholder="与公众平台服务器配置中的 Token 一致">
+          </div>
+        </div>
+        <div class="page-title" style="margin-top:18px">服务器配置</div>
+        <p style="font-size:13px;color:#8a90a3">
+          将微信公众平台「服务器配置」URL 填为：<code id="wxmpCallbackUrl">—</code><br>
+          Token 与上方一致，消息加解密方式选择「明文模式」。保存配置后点击「创建自定义菜单」，关注用户重新进入公众号即可看到「每日签到」。
+        </p>
+        <button class="btn btn-primary" id="saveWxmpBtn" style="margin-top:16px">保存签到配置</button>
+        <button class="btn btn-ghost" id="wxmpMenuBtn" style="margin-top:16px;margin-left:8px">创建自定义菜单</button>
+      </div>
+
       <div class="page-title">微信 / QQ 分享卡片</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">好友、群、朋友圈、QQ 空间识别链接时展示的标题、描述和封面图。留空则回退到站点名称与站点描述。封面图请使用可公网访问的完整图片 URL（建议 300x300 以上）。</div>
@@ -512,6 +549,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260907b"></script>
+<script src="../assets/js/admin.js?v=20260908a"></script>
 </body>
 </html>

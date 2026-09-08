@@ -91,7 +91,8 @@ class DB
                 ('epay_public_key',''),('epay_private_key',''),
                 ('alipay_enabled','0'),('alipay_app_id',''),('alipay_private_key',''),('alipay_public_key',''),
                 ('bark_enabled','0'),('bark_server','https://api.day.app'),('bark_key',''),('bark_notify_register','0'),('bark_notify_recharge','0'),('bark_sound',''),
-                ('share_title',''),('share_desc',''),('share_image','')");
+                ('share_title',''),('share_desc',''),('share_image',''),
+                ('wxmp_enabled','0'),('wxmp_appid',''),('wxmp_secret',''),('wxmp_token',''),('wxmp_checkin_points','1')");
             self::$pdo->exec("UPDATE `settings` SET `v`=" . self::$pdo->quote($ver) . " WHERE `k`='site_version' AND (`v`='' OR `v` NOT LIKE 'v%')");
         } catch (Throwable $e) {
             // 忽略
@@ -113,6 +114,60 @@ class DB
             if (!$idx) {
                 self::$pdo->exec('ALTER TABLE `users` ADD UNIQUE KEY `uk_email` (`email`)');
             }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `users` LIKE 'wx_openid'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `users` ADD COLUMN `wx_openid` VARCHAR(64) NULL COMMENT '微信公众号 OpenID'");
+            }
+            $idx = self::$pdo->query("SHOW INDEX FROM `users` WHERE Key_name='uk_wx_openid'")->fetchAll();
+            if (!$idx) {
+                self::$pdo->exec('ALTER TABLE `users` ADD UNIQUE KEY `uk_wx_openid` (`wx_openid`)');
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $tables = self::$pdo->query("SHOW TABLES LIKE 'wx_bind_codes'")->fetchAll();
+            if (!$tables) {
+                self::$pdo->exec("CREATE TABLE `wx_bind_codes` (
+                    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `user_id` INT UNSIGNED NOT NULL,
+                    `code` VARCHAR(8) NOT NULL COMMENT '绑定码',
+                    `expires_at` DATETIME NOT NULL,
+                    `used_at` DATETIME NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uk_code` (`code`),
+                    KEY `idx_user` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信绑定码'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $tables = self::$pdo->query("SHOW TABLES LIKE 'wx_checkins'")->fetchAll();
+            if (!$tables) {
+                self::$pdo->exec("CREATE TABLE `wx_checkins` (
+                    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `user_id` INT UNSIGNED NOT NULL,
+                    `openid` VARCHAR(64) NOT NULL,
+                    `points` INT NOT NULL DEFAULT 0,
+                    `checkin_date` DATE NOT NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uk_user_date` (`user_id`, `checkin_date`),
+                    KEY `idx_openid` (`openid`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信公众号签到记录'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            self::$pdo->exec("INSERT IGNORE INTO `settings` (`k`,`v`) VALUES
+                ('wxmp_enabled','0'),('wxmp_appid',''),('wxmp_secret',''),('wxmp_token',''),('wxmp_checkin_points','1')");
         } catch (Throwable $e) {
             // 忽略
         }
