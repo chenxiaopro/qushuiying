@@ -265,12 +265,17 @@ require_once __DIR__ . '/../../app/init.php';
           </div>
         </div>
         <div class="page-title" style="margin-top:18px">服务器配置</div>
-        <p style="font-size:13px;color:#8a90a3">
-          将微信公众平台「服务器配置」URL 填为：<code id="wxmpCallbackUrl">—</code><br>
-          Token 与上方一致，消息加解密方式选择「明文模式」。保存配置后点击「创建自定义菜单」，关注用户重新进入公众号即可看到「每日签到」。
+        <p style="font-size:13px;color:#8a90a3;line-height:1.8">
+          1. 先保存上方配置，再去公众平台「设置与开发 → 基本配置」启用服务器配置。<br>
+          2. URL 填：<code id="wxmpCallbackUrl">—</code>
+          <button class="btn btn-sm" type="button" id="wxmpCopyUrlBtn" style="margin-left:6px">复制</button><br>
+          3. Token 与上方一致，加密方式选「明文模式」，并在 IP 白名单填入服务器公网 IP。<br>
+          4. 提交验证成功后，点「创建自定义菜单」。关注用户重新进入公众号即可看到「每日签到」。
         </p>
         <button class="btn btn-primary" id="saveWxmpBtn" style="margin-top:16px">保存签到配置</button>
+        <button class="btn btn-ghost" id="wxmpCheckBtn" style="margin-top:16px;margin-left:8px">检测配置</button>
         <button class="btn btn-ghost" id="wxmpMenuBtn" style="margin-top:16px;margin-left:8px">创建自定义菜单</button>
+        <div class="hide" id="wxmpCheckResult" style="margin-top:14px;font-size:13px"></div>
       </div>
 
       <div class="page-title">微信 / QQ 分享卡片</div>
@@ -549,6 +554,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260908a"></script>
+<script src="../assets/js/admin.js?v=20260909a"></script>
 </body>
 </html>

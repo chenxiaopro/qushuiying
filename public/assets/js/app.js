@@ -41,7 +41,7 @@
   /* ---------- 用户状态 ---------- */
   var loggedIn = false;
   var points = 0;
-  var profile = { username: '', email: '', total_points: 0, created_at: '', wx_bound: false, wxmp_enabled: false, wxmp_checkin_points: 1 };
+  var profile = { username: '', email: '', total_points: 0, created_at: '', wx_bound: false, wxmp_enabled: false, wxmp_checkin_points: 1, wxmp_name: '', wx_checked_in: false, wx_checkin_points: 0 };
 
   function refreshMe() {
     return api('me', {}, 'GET').then(function (res) {
@@ -53,6 +53,9 @@
         profile.wx_bound = !!res.data.wx_bound;
         profile.wxmp_enabled = !!res.data.wxmp_enabled;
         profile.wxmp_checkin_points = res.data.wxmp_checkin_points || 1;
+        profile.wxmp_name = res.data.wxmp_name || '';
+        profile.wx_checked_in = !!res.data.wx_checked_in;
+        profile.wx_checkin_points = res.data.wx_checkin_points || 0;
         profile.total_points = res.data.total_points || 0;
         profile.created_at = res.data.created_at || '';
         $('username').dataset.name = profile.username;
@@ -799,6 +802,14 @@
     $('drawerTotalPoints').textContent = profile.total_points || 0;
     $('drawerEmail').textContent = profile.email || '未绑定';
     if ($('drawerWx')) $('drawerWx').textContent = profile.wx_bound ? '已绑定' : '未绑定';
+    if ($('drawerWxCheckinRow')) {
+      $('drawerWxCheckinRow').classList.toggle('hide', !profile.wxmp_enabled && !profile.wx_bound);
+      if ($('drawerWxCheckin')) {
+        $('drawerWxCheckin').textContent = profile.wx_checked_in
+          ? ('已领 +' + (profile.wx_checkin_points || 0) + ' 点')
+          : (profile.wx_bound ? '未签到' : '绑定后可领');
+      }
+    }
     $('drawerCreated').textContent = profile.created_at || '—';
     if ($('drawerEmailInput') && profile.email) $('drawerEmailInput').value = profile.email;
     renderWxBindCard();
@@ -813,9 +824,12 @@
     if ($('drawerWxBind')) $('drawerWxBind').classList.toggle('hide', bound || !enabled);
     if ($('drawerWxUnbind')) $('drawerWxUnbind').classList.toggle('hide', !bound);
     if ($('drawerWxHint')) {
+      var mp = profile.wxmp_name ? ('「' + profile.wxmp_name + '」') : '公众号';
       $('drawerWxHint').textContent = bound
-        ? '已绑定微信，可在公众号点「每日签到」领取 ' + (profile.wxmp_checkin_points || 1) + ' 点。'
-        : '关注公众号后发送绑定码，即可用功能栏「每日签到」领取点数。';
+        ? (profile.wx_checked_in
+          ? ('今日已签到，获得 ' + (profile.wx_checkin_points || 0) + ' 点。明天可在' + mp + '继续领取。')
+          : ('已绑定微信，打开' + mp + '点「每日签到」领取 ' + (profile.wxmp_checkin_points || 1) + ' 点。'))
+        : ('关注' + mp + '后发送绑定码，即可用功能栏「每日签到」领取点数。');
     }
     if (bound && $('drawerWxCodeWrap')) $('drawerWxCodeWrap').classList.add('hide');
   }
@@ -940,10 +954,18 @@
         if (res.code === 401) { toast(res.msg); doLogout(); return; }
         if (res.code !== 0) { toast(res.msg); return; }
         $('drawerWxCode').textContent = res.data.code || '————';
-        $('drawerWxCodeMeta').textContent = '有效至 ' + (res.data.expires_at || '') + '，发给公众号即可绑定';
+        var mp = (res.data.wx_name || profile.wxmp_name) ? ('发给公众号「' + (res.data.wx_name || profile.wxmp_name) + '」') : '发给公众号';
+        $('drawerWxCodeMeta').textContent = '有效至 ' + (res.data.expires_at || '') + '，' + mp + '即可绑定';
         $('drawerWxCodeWrap').classList.remove('hide');
-        toast('绑定码已生成');
+        toast('绑定码已生成，发给公众号即可绑定');
       }).then(function () { btn.disabled = false; });
+    });
+  }
+  if ($('drawerWxCopy')) {
+    $('drawerWxCopy').addEventListener('click', function () {
+      var code = ($('drawerWxCode') && $('drawerWxCode').textContent || '').trim();
+      if (!code || code === '————') { toast('请先生成绑定码'); return; }
+      copyToClipboard(code).then(function () { toast('已复制绑定码'); }).catch(function () { toast('复制失败，请手动复制'); });
     });
   }
   if ($('drawerWxUnbind')) {

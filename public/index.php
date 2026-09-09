@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260908a">
+<link rel="stylesheet" href="assets/css/style.css?v=20260909a">
 </head>
 <body>
 
@@ -268,6 +268,7 @@ $csrf = csrf_token();
       <div class="ud-rows">
         <div class="ud-row"><span class="ud-row-label">邮箱</span><span class="ud-row-val" id="drawerEmail">未绑定</span></div>
         <div class="ud-row"><span class="ud-row-label">微信</span><span class="ud-row-val" id="drawerWx">未绑定</span></div>
+        <div class="ud-row hide" id="drawerWxCheckinRow"><span class="ud-row-label">今日签到</span><span class="ud-row-val" id="drawerWxCheckin">未签到</span></div>
         <div class="ud-row"><span class="ud-row-label">注册时间</span><span class="ud-row-val" id="drawerCreated">—</span></div>
       </div>
       <div class="ud-actions">
@@ -290,6 +291,7 @@ $csrf = csrf_token();
         <div class="ud-wx-code hide" id="drawerWxCodeWrap">
           <div class="ud-wx-code-val" id="drawerWxCode">————</div>
           <div class="ud-wx-code-meta" id="drawerWxCodeMeta"></div>
+          <button class="btn btn-ghost btn-block" id="drawerWxCopy" type="button">复制绑定码</button>
         </div>
         <button class="btn btn-primary btn-block" id="drawerWxBind" type="button">生成绑定码</button>
         <button class="btn btn-ghost btn-block hide" id="drawerWxUnbind" type="button">解绑微信</button>
@@ -416,6 +418,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260908a"></script>
+<script src="assets/js/app.js?v=20260909a"></script>
 </body>
 </html>

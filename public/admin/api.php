@@ -82,6 +82,10 @@ try {
             require_admin();
             admin_wxmp_menu();
             break;
+        case 'wxmp_check':
+            require_admin();
+            admin_wxmp_check();
+            break;
         case 'apis':
             require_admin();
             admin_apis();
@@ -167,6 +171,8 @@ function admin_stats()
         'parses_today'=> (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE DATE(created_at)=?', [$today]),
         'points_total'=> (int)DB::scalar('SELECT IFNULL(SUM(total_points),0) FROM users'),
         'cards_unused'=> (int)DB::scalar('SELECT COUNT(*) FROM cards WHERE status=0'),
+        'wx_bound'    => (int)DB::scalar("SELECT COUNT(*) FROM users WHERE wx_openid IS NOT NULL AND wx_openid<>''"),
+        'wx_checkins_today' => (int)DB::scalar('SELECT COUNT(*) FROM wx_checkins WHERE checkin_date=?', [$today]),
         'recent_parses' => $recent,
     ]);
 }
@@ -632,4 +638,38 @@ function admin_wxmp_menu()
         fail($e->getMessage());
     }
     ok(['msg' => '自定义菜单已创建，关注用户重新进入公众号后可见「每日签到」']);
+}
+
+function admin_wxmp_check()
+{
+    $appid = trim((string)setting('wxmp_appid', ''));
+    $secret = trim((string)setting('wxmp_secret', ''));
+    $token = trim((string)setting('wxmp_token', ''));
+    $enabled = (int)setting('wxmp_enabled', 0) === 1;
+    $tips = [];
+    if (!$enabled) {
+        $tips[] = '签到开关未开启';
+    }
+    if ($appid === '') {
+        $tips[] = '未填写 AppID';
+    }
+    if ($secret === '') {
+        $tips[] = '未填写 AppSecret';
+    }
+    if ($token === '') {
+        $tips[] = '未填写 Token';
+    }
+    if ($tips) {
+        fail(implode('；', $tips) . '。请先保存配置');
+    }
+    try {
+        $ping = WechatMp::pingToken();
+    } catch (Throwable $e) {
+        fail($e->getMessage());
+    }
+    ok([
+        'ok'      => true,
+        'appid'   => $ping['appid'],
+        'message' => 'AppID / AppSecret 有效，已成功获取 access_token。请确认公众平台已配置服务器 URL 与 IP 白名单。',
+    ]);
 }

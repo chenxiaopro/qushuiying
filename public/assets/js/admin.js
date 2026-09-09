@@ -104,6 +104,8 @@
         ['今日解析', d.parses_today],
         ['累计充值点数', d.points_total],
         ['未用卡密', d.cards_unused],
+        ['已绑微信', d.wx_bound || 0],
+        ['今日签到', d.wx_checkins_today || 0],
       ];
       $('statsGrid').innerHTML = items.map(function (x) {
         return '<div class="stat"><b>' + esc(x[1]) + '</b><span>' + esc(x[0]) + '</span></div>';
@@ -464,6 +466,32 @@
       toast((res.data && res.data.msg) || '菜单已创建');
     });
   });
+  if ($('wxmpCopyUrlBtn')) {
+    $('wxmpCopyUrlBtn').addEventListener('click', function () {
+      var url = ($('wxmpCallbackUrl') && $('wxmpCallbackUrl').textContent || '').trim();
+      if (!url || url === '—') { toast('回调地址尚未生成'); return; }
+      var done = function () { toast('已复制回调地址'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(function () { copyFallback(url, done); });
+      } else {
+        copyFallback(url, done);
+      }
+    });
+  }
+  if ($('wxmpCheckBtn')) {
+    $('wxmpCheckBtn').addEventListener('click', function () {
+      adminApi('wxmp_check', {}).then(function (res) {
+        if (!checkAuth(res)) return;
+        var box = $('wxmpCheckResult');
+        box.classList.remove('hide');
+        if (res.code !== 0) {
+          box.innerHTML = '<span style="color:#e5484d">检测失败：' + esc(res.msg) + '</span>';
+          return;
+        }
+        box.innerHTML = '<span style="color:#12a150">' + esc((res.data && res.data.message) || '配置有效') + '</span>';
+      });
+    });
+  }
   $('saveShareBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
       ['share_title', 'share_desc', 'share_image']

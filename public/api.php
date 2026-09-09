@@ -174,6 +174,10 @@ function api_me()
         $data['wx_bound'] = trim((string)($u['wx_openid'] ?? '')) !== '';
         $data['wxmp_enabled'] = WechatMp::enabled();
         $data['wxmp_checkin_points'] = WechatMp::checkinPoints();
+        $data['wxmp_name'] = trim((string)setting('wechat_name', ''));
+        $today = WechatMp::todayCheckin((int)$u['id']);
+        $data['wx_checked_in'] = $today !== null;
+        $data['wx_checkin_points'] = $today ? (int)$today['points'] : 0;
         $data['points'] = (int)$u['points'];
         $data['total_points'] = (int)($u['total_points'] ?? 0);
         $data['created_at'] = (string)($u['created_at'] ?? '');

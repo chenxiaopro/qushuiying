@@ -76,7 +76,13 @@ class WechatMp
             . rawurlencode($appid) . '&secret=' . rawurlencode($secret);
         $resp = json_decode((string)http_get($url, [], 12), true);
         if (!is_array($resp) || empty($resp['access_token'])) {
-            $err = is_array($resp) ? ((string)($resp['errmsg'] ?? '') . ' (' . (string)($resp['errcode'] ?? '') . ')') : '空响应';
+            $code = (int)($resp['errcode'] ?? 0);
+            $err = is_array($resp) ? ((string)($resp['errmsg'] ?? '') . ' (' . $code . ')') : '空响应';
+            if ($code === 40164) {
+                $err .= '。请把服务器公网 IP 加入公众平台 IP 白名单';
+            } elseif ($code === 40013 || $code === 40125) {
+                $err .= '。请核对 AppID / AppSecret';
+            }
             throw new RuntimeException('获取 access_token 失败：' . $err);
         }
         $ttl = max(60, (int)($resp['expires_in'] ?? 7200) - 200);
@@ -89,7 +95,6 @@ class WechatMp
 
     public static function createMenu()
     {
-        $token = self::accessToken();
         $body = [
             'button' => [
                 [
@@ -99,13 +104,46 @@ class WechatMp
                 ],
             ],
         ];
-        $url = 'https://api.weixin.qq.com/cgi-bin/menu/create?access_token=' . rawurlencode($token);
-        $resp = json_decode((string)http_post($url, $body, [], 12, true), true);
+        $post = function ($force) use ($body) {
+            $token = self::accessToken($force);
+            $url = 'https://api.weixin.qq.com/cgi-bin/menu/create?access_token=' . rawurlencode($token);
+            return json_decode((string)http_post($url, $body, [], 12, true), true);
+        };
+        $resp = $post(false);
+        if (is_array($resp) && (int)($resp['errcode'] ?? 0) === 40001) {
+            $resp = $post(true);
+        }
         if (!is_array($resp) || (int)($resp['errcode'] ?? -1) !== 0) {
-            $err = is_array($resp) ? ((string)($resp['errmsg'] ?? '未知错误') . ' (' . (string)($resp['errcode'] ?? '') . ')') : '空响应';
+            $code = (int)($resp['errcode'] ?? 0);
+            $err = is_array($resp) ? ((string)($resp['errmsg'] ?? '未知错误') . ' (' . $code . ')') : '空响应';
+            if ($code === 48001) {
+                $err .= '。当前公众号类型不支持自定义菜单接口，请使用认证服务号/订阅号';
+            } elseif ($code === 40001) {
+                $err .= '。access_token 无效，请点「检测配置」核对 AppSecret';
+            }
             throw new RuntimeException('创建菜单失败：' . $err);
         }
         return true;
+    }
+
+    public static function welcomeText($openid = '')
+    {
+        $name = trim((string)setting('wechat_name', ''));
+        $head = $name !== '' ? ('欢迎关注「' . $name . '」。') : '欢迎关注。';
+        $user = $openid !== '' ? DB::one('SELECT username FROM users WHERE wx_openid=?', [$openid]) : null;
+        if ($user) {
+            return $head . '已绑定账号「' . $user['username'] . '」，点底部「每日签到」领取今日点数。';
+        }
+        return $head . '请先登录网站，在用户中心生成 6 位绑定码发给我。绑定后点底部「每日签到」每天领点。';
+    }
+
+    public static function helpText($openid = '')
+    {
+        $user = $openid !== '' ? DB::one('SELECT username FROM users WHERE wx_openid=?', [$openid]) : null;
+        if ($user) {
+            return '已绑定账号「' . $user['username'] . '」。点底部「每日签到」或直接回复「签到」领取今日点数。';
+        }
+        return '尚未绑定。请登录网站，在用户中心生成 6 位绑定码发给我，绑定后即可每日签到。';
     }
 
     public static function handleMessage(array $msg)
@@ -127,7 +165,7 @@ class WechatMp
                 return self::replyText($openid, $mpId, self::doCheckin($openid));
             }
             if ($event === 'subscribe') {
-                return self::replyText($openid, $mpId, "欢迎关注。请先在网站用户中心生成绑定码，再把绑定码发给我完成绑定。绑定后点底部「每日签到」即可领取点数。");
+                return self::replyText($openid, $mpId, self::welcomeText($openid));
             }
             return 'success';
         }
@@ -144,7 +182,7 @@ class WechatMp
             if (in_array($lower, ['签到', 'qd', 'checkin', '每日签到'], true)) {
                 return self::replyText($openid, $mpId, self::doCheckin($openid));
             }
-            return self::replyText($openid, $mpId, "请发送 6 位绑定码完成绑定，或点击底部「每日签到」领取今日点数。");
+            return self::replyText($openid, $mpId, self::helpText($openid));
         }
 
         return 'success';
@@ -207,7 +245,8 @@ class WechatMp
             return '绑定失败，请稍后重试。';
         }
 
-        return '绑定成功，账号「' . $user['username'] . '」。点击底部「每日签到」即可领取今日点数。';
+        $checkin = self::doCheckin($openid);
+        return '绑定成功，账号「' . $user['username'] . '」。' . $checkin;
     }
 
     public static function doCheckin($openid)
@@ -273,11 +312,36 @@ class WechatMp
             $code = strtoupper(substr(bin2hex(random_bytes(4)), 0, 6));
             try {
                 DB::execute('INSERT INTO wx_bind_codes(user_id,code,expires_at,created_at) VALUES(?,?,DATE_ADD(NOW(), INTERVAL 10 MINUTE),NOW())', [$userId, $code]);
-                return ['code' => $code, 'expires_at' => date('Y-m-d H:i:s', time() + 600)];
+                $fresh = DB::one('SELECT code, expires_at FROM wx_bind_codes WHERE user_id=? AND code=?', [$userId, $code]);
+                return $fresh ?: ['code' => $code, 'expires_at' => date('Y-m-d H:i:s', time() + 600)];
             } catch (Throwable $e) {
                 // 唯一冲突则重试
             }
         }
         throw new RuntimeException('生成绑定码失败，请稍后重试');
+    }
+
+    public static function todayCheckin($userId)
+    {
+        $row = DB::one(
+            'SELECT points, created_at FROM wx_checkins WHERE user_id=? AND checkin_date=?',
+            [(int)$userId, date('Y-m-d')]
+        );
+        if (!$row) {
+            return null;
+        }
+        return [
+            'points'     => (int)$row['points'],
+            'created_at' => (string)$row['created_at'],
+        ];
+    }
+
+    public static function pingToken()
+    {
+        $token = self::accessToken(true);
+        return [
+            'ok'    => $token !== '',
+            'appid' => trim((string)setting('wxmp_appid', '')),
+        ];
     }
 }
