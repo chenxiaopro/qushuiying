@@ -7,7 +7,12 @@ class WechatMp
 {
     public static function enabled()
     {
-        return (int)setting('wxmp_enabled', 0) === 1
+        return (int)setting('wxmp_enabled', 0) === 1;
+    }
+
+    public static function configured()
+    {
+        return self::enabled()
             && trim((string)setting('wxmp_token', '')) !== ''
             && trim((string)setting('wxmp_appid', '')) !== ''
             && trim((string)setting('wxmp_secret', '')) !== '';
@@ -134,7 +139,7 @@ class WechatMp
         if ($user) {
             return $head . '已绑定账号「' . $user['username'] . '」，点底部「每日签到」领取今日点数。';
         }
-        return $head . '请先登录网站，在用户中心生成 6 位绑定码发给我。绑定后点底部「每日签到」每天领点。';
+        return $head . '请先登录网站，打开用户中心把 6 位绑定码发给我。绑定后点底部「每日签到」每天领点。';
     }
 
     public static function helpText($openid = '')
@@ -143,7 +148,7 @@ class WechatMp
         if ($user) {
             return '已绑定账号「' . $user['username'] . '」。点底部「每日签到」或直接回复「签到」领取今日点数。';
         }
-        return '尚未绑定。请登录网站，在用户中心生成 6 位绑定码发给我，绑定后即可每日签到。';
+        return '尚未绑定。请登录网站，打开用户中心把 6 位绑定码发给我，绑定后即可每日签到。';
     }
 
     public static function handleMessage(array $msg)

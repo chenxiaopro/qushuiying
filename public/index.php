@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260909a">
+<link rel="stylesheet" href="assets/css/style.css?v=20260909b">
 </head>
 <body>
 
@@ -271,6 +271,17 @@ $csrf = csrf_token();
         <div class="ud-row hide" id="drawerWxCheckinRow"><span class="ud-row-label">今日签到</span><span class="ud-row-val" id="drawerWxCheckin">未签到</span></div>
         <div class="ud-row"><span class="ud-row-label">注册时间</span><span class="ud-row-val" id="drawerCreated">—</span></div>
       </div>
+      <div class="ud-form-card" id="drawerWxCard">
+        <div class="ud-form-title">绑定微信</div>
+        <p class="ud-form-hint" id="drawerWxHint">把下面 6 位绑定码发给公众号，即可绑定并每日签到领点。</p>
+        <div class="ud-wx-code hide" id="drawerWxCodeWrap">
+          <div class="ud-wx-code-val" id="drawerWxCode">————</div>
+          <div class="ud-wx-code-meta" id="drawerWxCodeMeta"></div>
+          <button class="btn btn-ghost btn-block" id="drawerWxCopy" type="button">复制绑定码</button>
+        </div>
+        <button class="btn btn-primary btn-block" id="drawerWxBind" type="button">刷新绑定码</button>
+        <button class="btn btn-ghost btn-block hide" id="drawerWxUnbind" type="button">解绑微信</button>
+      </div>
       <div class="ud-actions">
         <button class="btn btn-primary btn-block" id="drawerRecharge" type="button">充值</button>
         <button class="btn btn-ghost btn-block" id="drawerLogout" type="button">退出登录</button>
@@ -285,17 +296,6 @@ $csrf = csrf_token();
       <div class="user-pager" id="drawerRechargePager"></div>
     </div>
     <div class="user-panel hide" id="userPanelSettings">
-      <div class="ud-form-card" id="drawerWxCard">
-        <div class="ud-form-title">绑定微信</div>
-        <p class="ud-form-hint" id="drawerWxHint">关注公众号后发送绑定码，即可用功能栏「每日签到」领取点数。</p>
-        <div class="ud-wx-code hide" id="drawerWxCodeWrap">
-          <div class="ud-wx-code-val" id="drawerWxCode">————</div>
-          <div class="ud-wx-code-meta" id="drawerWxCodeMeta"></div>
-          <button class="btn btn-ghost btn-block" id="drawerWxCopy" type="button">复制绑定码</button>
-        </div>
-        <button class="btn btn-primary btn-block" id="drawerWxBind" type="button">生成绑定码</button>
-        <button class="btn btn-ghost btn-block hide" id="drawerWxUnbind" type="button">解绑微信</button>
-      </div>
       <div class="ud-form-card">
         <div class="ud-form-title">绑定邮箱</div>
         <label class="field-label">邮箱</label>
@@ -418,6 +418,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260909a"></script>
+<script src="assets/js/app.js?v=20260909b"></script>
 </body>
 </html>

@@ -629,8 +629,8 @@ function admin_version_delete()
 
 function admin_wxmp_menu()
 {
-    if ((int)setting('wxmp_enabled', 0) !== 1) {
-        fail('请先开启公众号签到并保存配置');
+    if (!WechatMp::configured()) {
+        fail('请先开启公众号签到并填写 AppID、AppSecret、Token');
     }
     try {
         WechatMp::createMenu();

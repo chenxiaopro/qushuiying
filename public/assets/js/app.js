@@ -41,7 +41,7 @@
   /* ---------- 用户状态 ---------- */
   var loggedIn = false;
   var points = 0;
-  var profile = { username: '', email: '', total_points: 0, created_at: '', wx_bound: false, wxmp_enabled: false, wxmp_checkin_points: 1, wxmp_name: '', wx_checked_in: false, wx_checkin_points: 0 };
+  var profile = { username: '', email: '', total_points: 0, created_at: '', wx_bound: false, wxmp_enabled: false, wxmp_checkin_points: 1, wxmp_name: '', wx_checked_in: false, wx_checkin_points: 0, wx_bind_code: '', wx_bind_expires: '' };
 
   function refreshMe() {
     return api('me', {}, 'GET').then(function (res) {
@@ -56,6 +56,8 @@
         profile.wxmp_name = res.data.wxmp_name || '';
         profile.wx_checked_in = !!res.data.wx_checked_in;
         profile.wx_checkin_points = res.data.wx_checkin_points || 0;
+        profile.wx_bind_code = res.data.wx_bind_code || '';
+        profile.wx_bind_expires = res.data.wx_bind_expires || '';
         profile.total_points = res.data.total_points || 0;
         profile.created_at = res.data.created_at || '';
         $('username').dataset.name = profile.username;
@@ -815,6 +817,14 @@
     renderWxBindCard();
   }
 
+  function showBindCode(code, expires, wxName) {
+    if (!$('drawerWxCodeWrap')) return;
+    $('drawerWxCode').textContent = code || '————';
+    var mp = (wxName || profile.wxmp_name) ? ('发给公众号「' + (wxName || profile.wxmp_name) + '」') : '发给公众号';
+    $('drawerWxCodeMeta').textContent = '有效至 ' + (expires || '') + '，' + mp + '即可绑定';
+    $('drawerWxCodeWrap').classList.remove('hide');
+  }
+
   function renderWxBindCard() {
     var card = $('drawerWxCard');
     if (!card) return;
@@ -829,9 +839,13 @@
         ? (profile.wx_checked_in
           ? ('今日已签到，获得 ' + (profile.wx_checkin_points || 0) + ' 点。明天可在' + mp + '继续领取。')
           : ('已绑定微信，打开' + mp + '点「每日签到」领取 ' + (profile.wxmp_checkin_points || 1) + ' 点。'))
-        : ('关注' + mp + '后发送绑定码，即可用功能栏「每日签到」领取点数。');
+        : ('把下面 6 位绑定码发给' + mp + '，即可绑定并每日签到领点。');
     }
-    if (bound && $('drawerWxCodeWrap')) $('drawerWxCodeWrap').classList.add('hide');
+    if (bound) {
+      if ($('drawerWxCodeWrap')) $('drawerWxCodeWrap').classList.add('hide');
+    } else if (enabled && profile.wx_bind_code) {
+      showBindCode(profile.wx_bind_code, profile.wx_bind_expires, profile.wxmp_name);
+    }
   }
 
   function switchUserTab(name) {
@@ -953,18 +967,17 @@
       api('wx_bind_code', {}).then(function (res) {
         if (res.code === 401) { toast(res.msg); doLogout(); return; }
         if (res.code !== 0) { toast(res.msg); return; }
-        $('drawerWxCode').textContent = res.data.code || '————';
-        var mp = (res.data.wx_name || profile.wxmp_name) ? ('发给公众号「' + (res.data.wx_name || profile.wxmp_name) + '」') : '发给公众号';
-        $('drawerWxCodeMeta').textContent = '有效至 ' + (res.data.expires_at || '') + '，' + mp + '即可绑定';
-        $('drawerWxCodeWrap').classList.remove('hide');
-        toast('绑定码已生成，发给公众号即可绑定');
+        profile.wx_bind_code = res.data.code || '';
+        profile.wx_bind_expires = res.data.expires_at || '';
+        showBindCode(profile.wx_bind_code, profile.wx_bind_expires, res.data.wx_name);
+        toast('绑定码已刷新，发给公众号即可绑定');
       }).then(function () { btn.disabled = false; });
     });
   }
   if ($('drawerWxCopy')) {
     $('drawerWxCopy').addEventListener('click', function () {
       var code = ($('drawerWxCode') && $('drawerWxCode').textContent || '').trim();
-      if (!code || code === '————') { toast('请先生成绑定码'); return; }
+      if (!code || code === '————') { toast('暂无绑定码'); return; }
       copyToClipboard(code).then(function () { toast('已复制绑定码'); }).catch(function () { toast('复制失败，请手动复制'); });
     });
   }
@@ -977,7 +990,9 @@
         if (res.code === 401) { toast(res.msg); doLogout(); return; }
         if (res.code !== 0) { toast(res.msg); return; }
         profile.wx_bound = false;
-        renderDrawerOverview();
+        profile.wx_bind_code = '';
+        profile.wx_bind_expires = '';
+        refreshMe();
         toast('已解绑微信');
       }).then(function () { btn.disabled = false; });
     });

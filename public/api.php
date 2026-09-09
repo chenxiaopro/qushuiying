@@ -178,6 +178,18 @@ function api_me()
         $today = WechatMp::todayCheckin((int)$u['id']);
         $data['wx_checked_in'] = $today !== null;
         $data['wx_checkin_points'] = $today ? (int)$today['points'] : 0;
+        $data['wx_bind_code'] = '';
+        $data['wx_bind_expires'] = '';
+        if (!$data['wx_bound'] && WechatMp::enabled()) {
+            try {
+                $codeRow = WechatMp::issueBindCode((int)$u['id']);
+                $data['wx_bind_code'] = (string)$codeRow['code'];
+                $data['wx_bind_expires'] = (string)$codeRow['expires_at'];
+            } catch (Throwable $e) {
+                $data['wx_bind_code'] = '';
+                $data['wx_bind_expires'] = '';
+            }
+        }
         $data['points'] = (int)$u['points'];
         $data['total_points'] = (int)($u['total_points'] ?? 0);
         $data['created_at'] = (string)($u['created_at'] ?? '');
