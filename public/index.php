@@ -120,7 +120,6 @@ $csrf = csrf_token();
       <div class="parse-type-wrap">
         <label class="parse-type-label" for="parseType">解析类型</label>
         <select id="parseType" class="parse-type">
-          <option value="">自动识别</option>
         </select>
       </div>
       <button class="btn btn-primary btn-parse" id="btnParse" type="button">立即解析</button>
@@ -418,6 +417,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260909b"></script>
+<script src="assets/js/app.js?v=20260910"></script>
 </body>
 </html>

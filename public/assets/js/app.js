@@ -175,7 +175,7 @@
       if (res.code !== 0) return;
       var sel = $('parseType');
       if (!sel) return;
-      sel.innerHTML = '<option value="">自动识别</option>';
+      sel.innerHTML = '';
       (res.data.list || []).forEach(function (pt) {
         var opt = document.createElement('option');
         opt.value = pt.key;
