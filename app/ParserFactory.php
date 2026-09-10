@@ -54,7 +54,7 @@ class ParserFactory
         }
 
         if ($api) {
-            return (new ApiParser($api))->parse($text);
+            return (new ApiParser($api, $mode))->parse($text);
         }
 
         if (DouyinParser::supports($text)) {

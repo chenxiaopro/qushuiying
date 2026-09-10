@@ -19,9 +19,13 @@ class ApiParser extends BaseParser
     /** @var array apis 表接口配置行 */
     private $api;
 
-    public function __construct($api)
+    /** @var string 前台解析类型（parse_types.key），空或 auto 表示自动 */
+    private $mode;
+
+    public function __construct($api, $mode = null)
     {
         $this->api = $api;
+        $this->mode = strtolower(trim((string)$mode));
     }
 
     public static function key()
@@ -43,7 +47,7 @@ class ApiParser extends BaseParser
             throw new RuntimeException('该接口未配置远程地址');
         }
 
-        $fullUrl = self::buildRequestUrl($apiUrl, $url);
+        $fullUrl = self::buildRequestUrl($apiUrl, $url, $this->mode, (string)($this->api['parse_type'] ?? ''));
         $host = parse_url($fullUrl, PHP_URL_HOST);
         if (!$host || is_private_host($host)) {
             throw new RuntimeException('接口地址不安全，禁止访问内网地址');
@@ -268,7 +272,11 @@ class ApiParser extends BaseParser
         $val = $data[$key] ?? '';
         return is_scalar($val) ? (string)$val : '';
     }
-    private static function buildRequestUrl($apiUrl, $url)
+    /**
+     * 拼远程请求：写入分享链接，并把 type 改成产品编码。
+     * 优先级：前台 mode → 接口 parse_type → 地址里已有 type；custom / 空则用 dsp。
+     */
+    public static function buildRequestUrl($apiUrl, $url, $mode = '', $parseType = '')
     {
         $parts = parse_url($apiUrl);
         if ($parts === false || empty($parts['host'])) {
@@ -279,13 +287,25 @@ class ApiParser extends BaseParser
         if (isset($parts['query'])) {
             parse_str($parts['query'], $query);
         }
-        // 强制把 url 参数设为当前分享链接
         $query['url'] = $url;
+        $query['type'] = self::resolveRemoteType($mode, $parseType, (string)($query['type'] ?? ''));
 
         $scheme = $parts['scheme'] ?? 'https';
         $port = isset($parts['port']) ? ':' . $parts['port'] : '';
         $path = $parts['path'] ?? '';
 
         return $scheme . '://' . $parts['host'] . $port . $path . '?' . http_build_query($query);
+    }
+
+    /** 远程产品编码：禁止 custom，短视频/图集默认 dsp */
+    public static function resolveRemoteType($mode, $parseType = '', $existing = '')
+    {
+        foreach ([$mode, $parseType, $existing] as $t) {
+            $t = strtolower(trim((string)$t));
+            if ($t !== '' && $t !== 'auto' && $t !== 'custom') {
+                return $t;
+            }
+        }
+        return 'dsp';
     }
 }

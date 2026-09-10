@@ -523,7 +523,7 @@ require_once __DIR__ . '/../../app/init.php';
     <div class="form-grid">
       <div class="form-grid-full">
         <label>接口地址</label>
-        <input class="field" id="apiUrl" placeholder="远程请求接口地址，末尾以 url= 结尾">
+        <input class="field" id="apiUrl" placeholder="如 https://host/api?type=dsp&uid=xxx&key=xxx&url=（type=custom 会按解析类型改写）">
       </div>
       <div>
         <label>返回数组</label>
