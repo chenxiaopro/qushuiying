@@ -155,7 +155,9 @@ label { font-size: 13px; color: var(--muted); display: block; margin: 12px 0 6px
   .form-grid { grid-template-columns: 1fr; }
   .table-wrap table { min-width: 620px; }
   .login-box { padding: 24px 20px; }
-  .modal { max-width: 100%; }
+  .modal { max-width: 100%; max-height: calc(100vh - 24px); }
+  .modal-mask { align-items: flex-start; padding: 12px; }
+  .modal { margin: 0; }
 }
 
 .pager { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; color: var(--muted); }
@@ -181,8 +183,9 @@ label { font-size: 13px; color: var(--muted); display: block; margin: 12px 0 6px
 .modal-mask {
   position: fixed; inset: 0; background: rgba(20,22,40,.5); display: flex;
   align-items: center; justify-content: center; z-index: 60; padding: 20px;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
 }
-.modal { background: #fff; border-radius: 18px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.modal { background: #fff; border-radius: 18px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.2); max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .modal-lg { max-width: 560px; }
 .modal-ver { max-width: 480px; }
 .modal-title { font-size: 16px; font-weight: 800; margin-bottom: 14px; }

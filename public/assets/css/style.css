@@ -269,17 +269,20 @@ a { color: var(--primary); text-decoration: none; }
   .result-actions .btn { flex: 1 1 45%; padding-left: 8px; padding-right: 8px; }
   .points-grid { grid-template-columns: repeat(3, 1fr); }
   .feature-grid { grid-template-columns: 1fr; margin-top: 0; }
+  .modal-mask { align-items: flex-start; padding: 12px; }
+  .modal { max-height: calc(100vh - 24px); }
 }
 
 /* 弹窗 */
 .modal-mask {
   position: fixed; inset: 0; background: rgba(20, 22, 40, .55);
   display: flex; align-items: center; justify-content: center; z-index: 50;
-  padding: 20px;
+  padding: 20px; overflow-y: auto; -webkit-overflow-scrolling: touch;
 }
 .modal {
   background: #fff; border-radius: 20px; padding: 24px; width: 100%; max-width: 400px;
   box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch;
 }
 .modal-lg { max-width: 440px; }
 .modal-sm { max-width: 320px; }

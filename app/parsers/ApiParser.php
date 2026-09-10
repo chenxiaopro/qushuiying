@@ -22,10 +22,14 @@ class ApiParser extends BaseParser
     /** @var string 前台解析类型（parse_types.key），空或 auto 表示自动 */
     private $mode;
 
-    public function __construct($api, $mode = null)
+    /** @var string 识别出的平台标识（slug），用于自动识别时映射产品编码 */
+    private $slug;
+
+    public function __construct($api, $mode = null, $slug = '')
     {
         $this->api = $api;
         $this->mode = strtolower(trim((string)$mode));
+        $this->slug = strtolower(trim((string)$slug));
     }
 
     public static function key()
@@ -47,7 +51,7 @@ class ApiParser extends BaseParser
             throw new RuntimeException('该接口未配置远程地址');
         }
 
-        $fullUrl = self::buildRequestUrl($apiUrl, $url, $this->mode, (string)($this->api['parse_type'] ?? ''));
+        $fullUrl = self::buildRequestUrl($apiUrl, $url, $this->mode, (string)($this->api['parse_type'] ?? ''), $this->slug);
         $host = parse_url($fullUrl, PHP_URL_HOST);
         if (!$host || is_private_host($host)) {
             throw new RuntimeException('接口地址不安全，禁止访问内网地址');
@@ -276,7 +280,7 @@ class ApiParser extends BaseParser
      * 拼远程请求：写入分享链接，并把 type 改成产品编码。
      * 优先级：前台 mode → 接口 parse_type → 地址里已有 type；custom / 空则用 dsp。
      */
-    public static function buildRequestUrl($apiUrl, $url, $mode = '', $parseType = '')
+    public static function buildRequestUrl($apiUrl, $url, $mode = '', $parseType = '', $slug = '')
     {
         $parts = parse_url($apiUrl);
         if ($parts === false || empty($parts['host'])) {
@@ -288,7 +292,7 @@ class ApiParser extends BaseParser
             parse_str($parts['query'], $query);
         }
         $query['url'] = $url;
-        $query['type'] = self::resolveRemoteType($mode, $parseType, (string)($query['type'] ?? ''));
+        $query['type'] = self::resolveRemoteType($mode, $parseType, (string)($query['type'] ?? ''), $slug);
 
         $scheme = $parts['scheme'] ?? 'https';
         $port = isset($parts['port']) ? ':' . $parts['port'] : '';
@@ -297,14 +301,21 @@ class ApiParser extends BaseParser
         return $scheme . '://' . $parts['host'] . $port . $path . '?' . http_build_query($query);
     }
 
-    /** 远程产品编码：禁止 custom，短视频/图集默认 dsp */
-    public static function resolveRemoteType($mode, $parseType = '', $existing = '')
+    /**
+     * 远程产品编码：禁止 custom。
+     * 优先级：前台 mode → 接口 parse_type → 地址已有 type；
+     * 均无效时按平台映射（小红书专属 xiaohongshu，其余用通用 dsp）。
+     */
+    public static function resolveRemoteType($mode, $parseType = '', $existing = '', $slug = '')
     {
         foreach ([$mode, $parseType, $existing] as $t) {
             $t = strtolower(trim((string)$t));
             if ($t !== '' && $t !== 'auto' && $t !== 'custom') {
                 return $t;
             }
+        }
+        if (strtolower(trim((string)$slug)) === 'xiaohongshu') {
+            return 'xiaohongshu';
         }
         return 'dsp';
     }
