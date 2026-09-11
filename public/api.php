@@ -26,6 +26,10 @@ require_once __DIR__ . '/../app/WechatMp.php';
 
 try {
     $action = input('action', '');
+    $loginRequired = ['parse', 'pay_create', 'pay_query', 'recharge_card', 'profile_email', 'profile_password', 'my_parses', 'my_recharges', 'wx_bind_code', 'wx_unbind'];
+    if (in_array($action, $loginRequired, true) && !current_user()) {
+        fail('请先登录', 401);
+    }
     $csrfSkip = ['me', 'parse_types', 'my_parses', 'my_recharges'];
     $needCsrf = !in_array($action, $csrfSkip, true)
         && $_SERVER['REQUEST_METHOD'] !== 'GET';
@@ -429,50 +433,52 @@ function api_my_recharges()
     $u = require_login();
     $page = max(1, (int)input('page', 1));
     $pageSize = 10;
-    $orders = DB::all(
-        'SELECT order_sn AS title, amount, points, status, pay_type, created_at FROM orders WHERE user_id=?',
-        [$u['id']]
-    );
-    $cards = DB::all(
-        'SELECT card_no AS title, 0 AS amount, points, 1 AS status, used_at AS created_at FROM cards WHERE used_by=? AND status=1',
-        [$u['id']]
-    );
-    $list = [];
-    foreach ($orders as $row) {
-        $list[] = [
-            'kind'       => 'order',
-            'title'      => (string)$row['title'],
-            'amount'     => (string)$row['amount'],
-            'points'     => (int)$row['points'],
-            'status'     => (int)$row['status'],
-            'pay_type'   => (string)($row['pay_type'] ?? ''),
-            'created_at' => (string)$row['created_at'],
-        ];
-    }
-    foreach ($cards as $row) {
-        $no = (string)$row['title'];
-        $tail = mb_substr($no, -4);
-        $mask = str_repeat('*', max(0, mb_strlen($no) - 4)) . $tail;
-        $list[] = [
-            'kind'       => 'card',
-            'title'      => $mask,
-            'amount'     => '0.00',
-            'points'     => (int)$row['points'],
-            'status'     => 1,
-            'pay_type'   => 'card',
-            'created_at' => (string)($row['created_at'] ?? ''),
-        ];
-    }
-    usort($list, function ($a, $b) {
-        return strcmp($b['created_at'], $a['created_at']);
-    });
-    $total = count($list);
+    $uid = (int)$u['id'];
+
+    $total = (int)DB::scalar('SELECT COUNT(*) FROM orders WHERE user_id=?', [$uid])
+        + (int)DB::scalar('SELECT COUNT(*) FROM cards WHERE used_by=? AND status=1', [$uid]);
     $pages = max(1, (int)ceil($total / $pageSize));
     if ($page > $pages) {
         $page = $pages;
     }
-    $slice = array_slice($list, ($page - 1) * $pageSize, $pageSize);
-    ok(['list' => $slice, 'total' => $total, 'page' => $page, 'pages' => $pages]);
+    $offset = ($page - 1) * $pageSize;
+
+    $rows = DB::all(
+        "SELECT 'order' AS kind, order_sn AS title, amount, points, status, pay_type, created_at FROM orders WHERE user_id=?" .
+        " UNION ALL " .
+        "SELECT 'card' AS kind, card_no AS title, 0 AS amount, points, 1 AS status, 'card' AS pay_type, used_at AS created_at FROM cards WHERE used_by=? AND status=1" .
+        " ORDER BY created_at DESC LIMIT " . $offset . ',' . $pageSize,
+        [$uid, $uid]
+    );
+
+    $list = [];
+    foreach ($rows as $row) {
+        if ((string)$row['kind'] === 'card') {
+            $no = (string)$row['title'];
+            $tail = mb_substr($no, -4);
+            $mask = str_repeat('*', max(0, mb_strlen($no) - 4)) . $tail;
+            $list[] = [
+                'kind'       => 'card',
+                'title'      => $mask,
+                'amount'     => '0.00',
+                'points'     => (int)$row['points'],
+                'status'     => 1,
+                'pay_type'   => 'card',
+                'created_at' => (string)($row['created_at'] ?? ''),
+            ];
+        } else {
+            $list[] = [
+                'kind'       => 'order',
+                'title'      => (string)$row['title'],
+                'amount'     => (string)$row['amount'],
+                'points'     => (int)$row['points'],
+                'status'     => (int)$row['status'],
+                'pay_type'   => (string)($row['pay_type'] ?? ''),
+                'created_at' => (string)$row['created_at'],
+            ];
+        }
+    }
+    ok(['list' => $list, 'total' => $total, 'page' => $page, 'pages' => $pages]);
 }
 
 function api_wx_bind_code()

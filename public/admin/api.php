@@ -22,6 +22,9 @@ require_once __DIR__ . '/../../app/WechatMp.php';
 try {
     $action = input('action', '');
     if ($action !== 'login' && $action !== '' && $_SERVER['REQUEST_METHOD'] !== 'GET') {
+        if (!current_admin()) {
+            fail('请先登录', 401);
+        }
         if ($action !== 'logout') {
             csrf_check();
         }
@@ -556,6 +559,7 @@ function admin_parse_type_delete()
         fail('解析类型不存在');
     }
     DB::execute('DELETE FROM parse_types WHERE id=?', [$id]);
+    DB::execute("UPDATE apis SET parse_type='' WHERE parse_type=?", [(string)$pt['key']]);
     ok();
 }
 
