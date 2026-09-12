@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../app/init.php';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>后台管理 - <?= htmlspecialchars(setting('site_name', '短视频去水印')) ?></title>
-<link rel="stylesheet" href="../assets/css/admin.css?v=20260910">
+<link rel="stylesheet" href="../assets/css/admin.css?v=20260912">
 </head>
 <body>
 
@@ -63,6 +63,10 @@ require_once __DIR__ . '/../../app/init.php';
       <div class="card" style="margin-top:16px">
         <div class="page-sub" style="margin-bottom:8px">最近解析记录</div>
         <div id="recentParses"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="page-sub" style="margin-bottom:8px">用户分布 <span class="user-map-hint" id="userMapHint"></span></div>
+        <div class="user-map" id="userMap"></div>
       </div>
     </div>
 
@@ -554,6 +558,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260909a"></script>
+<script src="../assets/js/admin.js?v=20260912"></script>
 </body>
 </html>

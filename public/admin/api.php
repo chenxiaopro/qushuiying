@@ -18,6 +18,7 @@
 require_once __DIR__ . '/../../app/init.php';
 require_once __DIR__ . '/../../app/payment/Epay.php';
 require_once __DIR__ . '/../../app/WechatMp.php';
+require_once __DIR__ . '/../../app/GeoIp.php';
 
 try {
     $action = input('action', '');
@@ -132,6 +133,10 @@ try {
         case 'version_delete':
             require_admin();
             admin_version_delete();
+            break;
+        case 'user_geo':
+            require_admin();
+            admin_user_geo();
             break;
         case 'me':
             $a = current_admin();
@@ -675,5 +680,48 @@ function admin_wxmp_check()
         'ok'      => true,
         'appid'   => $ping['appid'],
         'message' => 'AppID / AppSecret 有效，已成功获取 access_token。请确认公众平台已配置服务器 URL 与 IP 白名单。',
+    ]);
+}
+
+/** 用户地理分布：按省级行政区聚合用户数量（基于最后登录 IP） */
+function admin_user_geo()
+{
+    $total = (int)DB::scalar('SELECT COUNT(*) FROM users');
+    $rows = DB::all("SELECT last_login_ip AS ip FROM users WHERE last_login_ip IS NOT NULL AND last_login_ip<>''");
+
+    $userIps = [];
+    $ipSet = [];
+    foreach ($rows as $r) {
+        $ip = trim((string)$r['ip']);
+        if ($ip === '' || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            continue;
+        }
+        $userIps[] = $ip;
+        $ipSet[$ip] = true;
+    }
+
+    $geo = $ipSet ? GeoIp::locateBatch(array_keys($ipSet)) : [];
+
+    $provCount = [];
+    $located = 0;
+    foreach ($userIps as $ip) {
+        $short = GeoIp::normalizeProvince($geo[$ip]['province'] ?? '');
+        if ($short !== '' && GeoIp::isChinaProvince($short)) {
+            $provCount[$short] = ($provCount[$short] ?? 0) + 1;
+            $located++;
+        }
+    }
+    arsort($provCount);
+    $provinces = [];
+    foreach ($provCount as $name => $value) {
+        $provinces[] = ['name' => $name, 'value' => $value];
+    }
+
+    ok([
+        'total'      => $total,
+        'located'    => $located,
+        'unknown'    => max(0, $total - $located),
+        'service_ok' => GeoIp::serviceOk(),
+        'provinces'  => $provinces,
     ]);
 }

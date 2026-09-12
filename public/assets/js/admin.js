@@ -79,7 +79,7 @@
     document.querySelectorAll('.page').forEach(function (p) {
       p.classList.toggle('hide', p.getAttribute('data-name') !== name);
     });
-    if (name === 'dashboard') loadStats();
+    if (name === 'dashboard') { loadStats(); loadUserMap(); }
     if (name === 'users') loadUsers(1);
     if (name === 'orders') loadOrders(1, $('orderStatus').value);
     if (name === 'logs') loadLogs(1);
@@ -127,6 +127,107 @@
           }).join('') + '</tbody></table></div>';
       }
     });
+  }
+
+  /* ---------- 用户分布地图 ---------- */
+  var userMapReady = false;
+  var userMapChart = null;
+
+  function loadUserMap() {
+    var el = $('userMap');
+    if (!el || userMapReady) return;
+    adminApi('user_geo').then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { showMapHint('地图数据加载失败'); return; }
+      var d = res.data || {};
+      if (!d.total) {
+        el.innerHTML = '<div class="user-map-empty">暂无用户数据</div>';
+        return;
+      }
+      userMapReady = true;
+      loadChinaMap().then(function (echarts) {
+        renderChinaMap(echarts, el, d);
+      }).catch(function () {
+        userMapReady = false;
+        el.innerHTML = '<div class="user-map-empty">地图资源加载失败</div>';
+      });
+    });
+  }
+
+  function showMapHint(msg) {
+    var h = $('userMapHint');
+    if (h) h.textContent = msg ? '（' + msg + '）' : '';
+  }
+
+  function loadChinaMap() {
+    return new Promise(function (resolve, reject) {
+      var go = function (echarts) {
+        fetch('../assets/vendor/china.json')
+          .then(function (r) { return r.json(); })
+          .then(function (geo) {
+            normalizeGeo(geo);
+            echarts.registerMap('china', geo);
+            resolve(echarts);
+          })
+          .catch(reject);
+      };
+      if (window.echarts) { go(window.echarts); return; }
+      var s = document.createElement('script');
+      s.src = '../assets/vendor/echarts.min.js';
+      s.onload = function () { window.echarts ? go(window.echarts) : reject(new Error('echarts')); };
+      s.onerror = function () { reject(new Error('echarts')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function normalizeProvinceName(n) {
+    n = String(n == null ? '' : n).trim();
+    var alias = {
+      '内蒙古自治区': '内蒙古', '广西壮族自治区': '广西', '西藏自治区': '西藏',
+      '宁夏回族自治区': '宁夏', '新疆维吾尔自治区': '新疆',
+      '香港特别行政区': '香港', '澳门特别行政区': '澳门'
+    };
+    if (alias[n]) return alias[n];
+    return n.replace(/(省|市)$/, '');
+  }
+
+  function normalizeGeo(geo) {
+    (geo.features || []).forEach(function (f) {
+      if (f.properties && f.properties.name) {
+        f.properties.name = normalizeProvinceName(f.properties.name);
+      }
+    });
+  }
+
+  function renderChinaMap(echarts, el, d) {
+    var data = d.provinces || [];
+    var max = 1;
+    data.forEach(function (x) { if (x.value > max) max = x.value; });
+    userMapChart = echarts.init(el);
+    userMapChart.setOption({
+      tooltip: {
+        trigger: 'item',
+        formatter: function (p) {
+          var v = (p.value == null || isNaN(p.value)) ? 0 : p.value;
+          return p.name + '：' + v + ' 位用户';
+        }
+      },
+      visualMap: {
+        min: 0, max: max, left: 16, bottom: 16,
+        text: ['多', '少'], calculable: true,
+        inRange: { color: ['#eef4ff', '#7aa9e6', '#2c5fa8', '#123a75'] },
+        textStyle: { color: '#8a90a3' }
+      },
+      series: [{
+        type: 'map', map: 'china', roam: false, zoom: 1.15,
+        label: { show: false },
+        itemStyle: { borderColor: '#ffffff', borderWidth: 0.5, areaColor: '#f2f4f8' },
+        emphasis: { label: { show: true, color: '#1a1f2e' }, itemStyle: { areaColor: '#ffd166' } },
+        data: data
+      }]
+    });
+    if (d.service_ok === false) showMapHint('定位服务暂不可用，仅显示已缓存数据');
+    window.addEventListener('resize', function () { if (userMapChart) userMapChart.resize(); });
   }
 
   /* ---------- 用户管理 ---------- */
