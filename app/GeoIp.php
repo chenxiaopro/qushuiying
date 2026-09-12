@@ -1,9 +1,9 @@
 <?php
 /**
- * IP 地理定位（基于 ip-api.com 免费接口）
+ * IP 地理定位（基于 uapis.cn IP 查询接口）
  *
  * 负责把公网 IP 解析为中国省级行政区，并将结果缓存到 ip_geo 表。
- * 免费接口单次批量上限 100 个 IP，调用失败时静默降级为「未知地区」。
+ * 接口为单 IP 查询，调用失败时静默降级为「未知地区」。
  */
 
 require_once __DIR__ . '/functions.php';
@@ -11,8 +11,8 @@ require_once __DIR__ . '/db.php';
 
 class GeoIp
 {
-    /** 单次最多解析的未缓存 IP 数量（ip-api 免费版批量上限） */
-    const BATCH_LIMIT = 100;
+    /** 单次最多解析的未缓存 IP 数量（单 IP 接口，控制每次外呼规模） */
+    const BATCH_LIMIT = 30;
 
     /** 本次解析过程中外部服务是否可用 */
     private static $serviceOk = true;
@@ -132,37 +132,45 @@ class GeoIp
         return $result;
     }
 
-    /** 调用 ip-api.com 批量接口并写缓存；失败时标记 serviceOk=false */
+    /** 调用 uapis.cn 单 IP 接口并写缓存；失败时标记 serviceOk=false */
     private static function fetchRemote(array $ips, array &$result)
     {
-        $url = 'http://ip-api.com/batch?lang=zh-CN&fields=status,country,regionName,city,query';
-        try {
-            $resp = http_post($url, array_values($ips), [], 12, true);
-        } catch (Throwable $e) {
-            error_log('[wm-geo] ' . $e->getMessage());
-            self::$serviceOk = false;
-            return;
-        }
-        $json = json_decode((string)$resp, true);
-        if (!is_array($json)) {
-            self::$serviceOk = false;
-            return;
-        }
-        foreach ($json as $item) {
-            if (!is_array($item)) {
+        $base = 'https://uapis.cn/api/v1/network/ipinfo?ip=';
+        $okCount = 0;
+        foreach ($ips as $ip) {
+            $url = $base . rawurlencode($ip);
+            try {
+                $resp = http_get($url, [], 8);
+            } catch (Throwable $e) {
+                error_log('[wm-geo] ' . $e->getMessage());
                 continue;
             }
-            $ip = trim((string)($item['query'] ?? ''));
-            if ($ip === '') {
+            $json = json_decode((string)$resp, true);
+            if (!is_array($json)) {
                 continue;
             }
-            $ok = ($item['status'] ?? '') === 'success';
-            $country = $ok ? (string)($item['country'] ?? '') : '';
-            $province = $ok ? self::normalizeProvince((string)($item['regionName'] ?? '')) : '';
-            $city = $ok ? (string)($item['city'] ?? '') : '';
+            list($country, $province, $city) = self::parseRegion((string)($json['region'] ?? ''));
             $result[$ip] = ['country' => $country, 'province' => $province, 'city' => $city];
             self::saveCache($ip, $country, $province, $city);
+            $okCount++;
         }
+        if ($okCount === 0 && !empty($ips)) {
+            self::$serviceOk = false;
+        }
+    }
+
+    /** 解析接口返回的 region 字符串（如「中国 江苏 南京」「美国 California Mountain View」） */
+    private static function parseRegion($region)
+    {
+        $region = trim((string)$region);
+        if ($region === '' || $region === '未知地区') {
+            return ['', '', ''];
+        }
+        $parts = preg_split('/\s+/', $region);
+        $country = $parts[0] ?? '';
+        $province = isset($parts[1]) ? self::normalizeProvince((string)$parts[1]) : '';
+        $city = isset($parts[2]) ? implode(' ', array_slice($parts, 2)) : '';
+        return [$country, $province, $city];
     }
 
     /** 写入缓存，空省份也保存以避免反复请求 */
