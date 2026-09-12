@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../app/init.php';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>后台管理 - <?= htmlspecialchars(setting('site_name', '短视频去水印')) ?></title>
-<link rel="stylesheet" href="../assets/css/admin.css?v=20260912">
+<link rel="stylesheet" href="../assets/css/admin.css?v=20260912b">
 </head>
 <body>
 
@@ -44,6 +44,7 @@ require_once __DIR__ . '/../../app/init.php';
     <nav class="nav-group">
       <div class="nav-title">管理</div>
       <div class="nav-item" data-page="users">用户管理</div>
+      <div class="nav-item" data-page="userMap">用户分布</div>
       <div class="nav-item" data-page="orders">订单管理</div>
       <div class="nav-item" data-page="logs">解析记录</div>
     </nav>
@@ -64,9 +65,18 @@ require_once __DIR__ . '/../../app/init.php';
         <div class="page-sub" style="margin-bottom:8px">最近解析记录</div>
         <div id="recentParses"></div>
       </div>
+    </div>
+
+    <!-- 用户分布 -->
+    <div class="page hide" data-name="userMap">
+      <div class="page-title">用户分布</div>
+      <div class="stats-grid" id="userGeoStats"></div>
       <div class="card" style="margin-top:16px">
-        <div class="page-sub" style="margin-bottom:8px">用户分布 <span class="user-map-hint" id="userMapHint"></span></div>
-        <div class="user-map" id="userMap"></div>
+        <div class="page-sub" style="margin-bottom:8px">省级分布 <span class="user-map-hint" id="userMapHint"></span></div>
+        <div class="user-map-layout">
+          <div class="user-map" id="userMap"></div>
+          <div class="user-map-rank" id="userMapRank"></div>
+        </div>
       </div>
     </div>
 
@@ -558,6 +568,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260912"></script>
+<script src="../assets/js/admin.js?v=20260912b"></script>
 </body>
 </html>

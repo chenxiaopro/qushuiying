@@ -79,7 +79,8 @@
     document.querySelectorAll('.page').forEach(function (p) {
       p.classList.toggle('hide', p.getAttribute('data-name') !== name);
     });
-    if (name === 'dashboard') { loadStats(); loadUserMap(); }
+    if (name === 'dashboard') loadStats();
+    if (name === 'userMap') loadUserMap();
     if (name === 'users') loadUsers(1);
     if (name === 'orders') loadOrders(1, $('orderStatus').value);
     if (name === 'logs') loadLogs(1);
@@ -135,15 +136,18 @@
 
   function loadUserMap() {
     var el = $('userMap');
-    if (!el || userMapReady) return;
+    if (!el) return;
     adminApi('user_geo').then(function (res) {
       if (!checkAuth(res)) return;
       if (res.code !== 0) { showMapHint('地图数据加载失败'); return; }
       var d = res.data || {};
+      renderGeoStats(d);
+      renderGeoRank(d);
       if (!d.total) {
         el.innerHTML = '<div class="user-map-empty">暂无用户数据</div>';
         return;
       }
+      if (userMapReady) { if (userMapChart) userMapChart.resize(); return; }
       userMapReady = true;
       loadChinaMap().then(function (echarts) {
         renderChinaMap(echarts, el, d);
@@ -152,6 +156,40 @@
         el.innerHTML = '<div class="user-map-empty">地图资源加载失败</div>';
       });
     });
+  }
+
+  function renderGeoStats(d) {
+    var el = $('userGeoStats');
+    if (!el) return;
+    var prov = d.provinces || [];
+    var items = [
+      ['总用户', d.total || 0],
+      ['已定位', d.located || 0],
+      ['未定位', d.unknown || 0],
+      ['覆盖省份', prov.length]
+    ];
+    el.innerHTML = items.map(function (x) {
+      return '<div class="stat"><b>' + esc(x[1]) + '</b><span>' + esc(x[0]) + '</span></div>';
+    }).join('');
+  }
+
+  function renderGeoRank(d) {
+    var el = $('userMapRank');
+    if (!el) return;
+    var prov = (d.provinces || []).slice().sort(function (a, b) { return b.value - a.value; });
+    if (!prov.length) {
+      el.innerHTML = '<div class="user-map-empty">暂无定位数据</div>';
+      return;
+    }
+    var max = prov[0].value || 1;
+    el.innerHTML = prov.map(function (x) {
+      var pct = Math.round(x.value / max * 100);
+      return '<div class="rank-item">' +
+        '<span class="rank-name">' + esc(x.name) + '</span>' +
+        '<span class="rank-bar"><i style="width:' + pct + '%"></i></span>' +
+        '<span class="rank-val">' + x.value + '</span>' +
+        '</div>';
+    }).join('');
   }
 
   function showMapHint(msg) {
@@ -240,7 +278,7 @@
         if (!d.list.length) { $('usersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
         else {
           $('usersTable').innerHTML =
-            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>微信</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>微信</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>IP地址</th><th>操作</th></tr></thead><tbody>' +
             d.list.map(function (u) {
               return '<tr>' +
                 '<td>' + u.id + '</td>' +
@@ -252,6 +290,7 @@
                 '<td>' + (u.status == 1 ? '<span class="badge-ok">正常</span>' : '<span class="badge-off">禁用</span>') + '</td>' +
                 '<td>' + esc(u.created_at) + '</td>' +
                 '<td>' + esc(u.last_login_at || '-') + '</td>' +
+                '<td>' + esc(u.last_login_ip || '-') + '</td>' +
                 '<td>' +
                   '<button class="btn btn-sm" data-user-action="add" data-id="' + u.id + '">加点</button> ' +
                   '<button class="btn btn-sm" data-user-action="deduct" data-id="' + u.id + '">扣点</button> ' +
