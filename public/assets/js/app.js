@@ -21,7 +21,7 @@
     });
   }
 
-  function api(action, params, method) {
+  function api(action, params, method, signal) {
     method = method || 'POST';
     var q = new URLSearchParams();
     q.append('action', action);
@@ -31,6 +31,7 @@
     Object.keys(params || {}).forEach(function (k) { q.append(k, params[k]); });
     var url = method === 'GET' || method === 'HEAD' ? ('api.php?' + q.toString()) : 'api.php';
     var opts = { method: method, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
+    if (signal) opts.signal = signal;
     if (method !== 'GET' && method !== 'HEAD') opts.body = q.toString();
     return fetch(url, opts).then(function (r) { return r.json(); }).then(function (res) {
       if (res && res.data && res.data.csrf) window.WM.csrf = res.data.csrf;
@@ -41,7 +42,7 @@
   /* ---------- 用户状态 ---------- */
   var loggedIn = false;
   var points = 0;
-  var profile = { username: '', email: '', total_points: 0, created_at: '', wx_bound: false, wxmp_enabled: false, wxmp_checkin_points: 1, wxmp_name: '', wx_checked_in: false, wx_checkin_points: 0, wx_bind_code: '', wx_bind_expires: '' };
+  var profile = { username: '', email: '', total_points: 0, created_at: '', wx_bound: false, wxmp_enabled: false, wxmp_checkin_points: 1, wxmp_name: '', wx_checked_in: false, wx_checkin_points: 0, wx_bind_code: '', wx_bind_expires: '', invite_count: 0, invite_reward_register: 0, invite_reward_recharge: 0, id: 0 };
 
   function refreshMe() {
     return api('me', {}, 'GET').then(function (res) {
@@ -60,6 +61,10 @@
         profile.wx_bind_expires = res.data.wx_bind_expires || '';
         profile.total_points = res.data.total_points || 0;
         profile.created_at = res.data.created_at || '';
+        profile.invite_count = res.data.invite_count || 0;
+        profile.invite_reward_register = res.data.invite_reward_register || 0;
+        profile.invite_reward_recharge = res.data.invite_reward_recharge || 0;
+        profile.id = res.data.id || 0;
         $('username').dataset.name = profile.username;
         renderUser();
         renderDrawerOverview();
@@ -154,7 +159,10 @@
     var btn = $('regSubmit');
     if (btn.disabled) return;
     btn.disabled = true;
-    api('register', { username: $('regUser').value.trim(), password: $('regPass').value })
+    var invite = new URLSearchParams(location.search).get('invite') || '';
+    var payload = { username: $('regUser').value.trim(), password: $('regPass').value };
+    if (invite) payload.invite = invite;
+    api('register', payload)
       .then(function (res) {
         if (res.code === 0) {
           toast(res.data.msg);
@@ -213,16 +221,28 @@
     });
   }
 
+  var parseCtrl = null;
+  var parseTimer = null;
+
   function doParse() {
+    var btn = $('btnParse');
+    if (parseCtrl) {
+      parseCtrl.abort();
+      return;
+    }
     var text = $('txt').value.trim();
     if (!text) { toast('请先粘贴分享内容'); return; }
     if (!loggedIn) { toast('请先登录'); showModal('loginModal'); return; }
-    var btn = $('btnParse');
-    btn.disabled = true;
-    btn.textContent = '解析中...';
+
+    parseCtrl = new AbortController();
+    var timedOut = false;
+    btn.classList.add('btn-loading');
+    btn.textContent = '取消解析';
+    parseTimer = setTimeout(function () { timedOut = true; parseCtrl.abort(); }, 30000);
+
     var params = { text: text };
     if ($('parseType') && $('parseType').value) params.mode = $('parseType').value;
-    api('parse', params).then(function (res) {
+    api('parse', params, 'POST', parseCtrl.signal).then(function (res) {
       if (res.code === 0) {
         renderResult(res.data);
         points = res.data.points_left;
@@ -233,19 +253,28 @@
         toast(res.msg);
         if (res.code === 401) { loggedIn = false; renderUser(); }
       }
-    }).catch(function () { toast('网络异常，请重试'); })
-      .then(function () {
-        btn.disabled = false;
-        btn.textContent = '立即解析';
-      });
+    }).catch(function (e) {
+      if (e && e.name === 'AbortError') {
+        toast(timedOut ? '解析超时，请稍后重试' : '解析已取消');
+      } else {
+        toast('网络异常，请重试');
+      }
+    }).then(function () {
+      clearTimeout(parseTimer);
+      parseCtrl = null;
+      btn.classList.remove('btn-loading');
+      btn.textContent = '立即解析';
+    });
   }
 
   function dlProxy(url, name) {
-    return 'download.php?url=' + encodeURIComponent(url) + '&name=' + encodeURIComponent(name || '');
+    var t = (window.__dlTokens && window.__dlTokens[url]) || '';
+    return 'download.php?url=' + encodeURIComponent(url) + '&name=' + encodeURIComponent(name || '') + (t ? '&token=' + encodeURIComponent(t) : '');
   }
 
   function streamProxy(url) {
-    return 'download.php?url=' + encodeURIComponent(url) + '&stream=1';
+    var t = (window.__dlTokens && window.__dlTokens[url]) || '';
+    return 'download.php?url=' + encodeURIComponent(url) + '&stream=1' + (t ? '&token=' + encodeURIComponent(t) : '');
   }
 
   function normalizeText(s) {
@@ -283,6 +312,7 @@
   }
 
   function renderResult(d) {
+    window.__dlTokens = d.tokens || {};
     var r = d.result;
     var list = Array.isArray(r.list) ? r.list : [];
     if (list.length > 0) {
@@ -813,6 +843,14 @@
       }
     }
     $('drawerCreated').textContent = profile.created_at || '—';
+    if ($('drawerInviteCount')) $('drawerInviteCount').textContent = (profile.invite_count || 0) + ' 人';
+    if ($('drawerInviteLink')) $('drawerInviteLink').value = location.origin + '/?invite=' + (profile.id || '');
+    if ($('drawerInviteHint')) {
+      var rewards = [];
+      if (profile.invite_reward_register > 0) rewards.push('好友注册奖励 ' + profile.invite_reward_register + ' 点');
+      if (profile.invite_reward_recharge > 0) rewards.push('好友首充奖励 ' + profile.invite_reward_recharge + ' 点');
+      $('drawerInviteHint').textContent = rewards.length ? rewards.join('，') : '邀请好友注册，一起使用本工具。';
+    }
     if ($('drawerEmailInput') && profile.email) $('drawerEmailInput').value = profile.email;
     renderWxBindCard();
   }
@@ -979,6 +1017,13 @@
       var code = ($('drawerWxCode') && $('drawerWxCode').textContent || '').trim();
       if (!code || code === '————') { toast('暂无绑定码'); return; }
       copyToClipboard(code).then(function () { toast('已复制绑定码'); }).catch(function () { toast('复制失败，请手动复制'); });
+    });
+  }
+  if ($('drawerInviteCopy')) {
+    $('drawerInviteCopy').addEventListener('click', function () {
+      var link = $('drawerInviteLink') ? $('drawerInviteLink').value : '';
+      if (!link) { toast('暂无邀请链接'); return; }
+      copyToClipboard(link).then(function () { toast('已复制邀请链接'); }).catch(function () { toast('复制失败，请手动复制'); });
     });
   }
   if ($('drawerWxUnbind')) {

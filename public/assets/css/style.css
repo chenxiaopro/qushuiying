@@ -42,6 +42,19 @@ a { color: var(--primary); text-decoration: none; }
 }
 .btn:hover { opacity: .88; }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn-loading::before {
+  content: '';
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: wm-spin .7s linear infinite;
+}
+@keyframes wm-spin { to { transform: rotate(360deg); } }
 .btn-primary {
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
   color: #fff;

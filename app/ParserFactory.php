@@ -16,6 +16,29 @@ require_once __DIR__ . '/parsers/KuaishouParser.php';
 
 class ParserFactory
 {
+    /** 最近一次解析使用的接口 ID（0=内置解析器/未匹配） */
+    private static $lastApiId = 0;
+
+    /** 最近一次解析耗时（毫秒） */
+    private static $lastDurationMs = 0;
+
+    /** 记录本次解析的接口与耗时 */
+    private static function mark($apiId, $t0)
+    {
+        self::$lastApiId = (int)$apiId;
+        self::$lastDurationMs = (int)round((microtime(true) - $t0) * 1000);
+    }
+
+    public static function lastApiId()
+    {
+        return self::$lastApiId;
+    }
+
+    public static function lastDurationMs()
+    {
+        return self::$lastDurationMs;
+    }
+
     /** 识别平台标识，未识别返回 null */
     public static function detect($text)
     {
@@ -31,8 +54,10 @@ class ParserFactory
      */
     public static function parse($text, $mode = null)
     {
+        $t0 = microtime(true);
         $text = trim((string)$text);
         if (mb_strlen($text) < 4) {
+            self::mark(0, $t0);
             throw new RuntimeException('分享内容过短');
         }
 
@@ -54,16 +79,34 @@ class ParserFactory
         }
 
         if ($api) {
-            return (new ApiParser($api, $mode, $slug))->parse($text);
+            try {
+                $result = (new ApiParser($api, $mode, $slug))->parse($text);
+            } catch (Throwable $e) {
+                self::mark((int)$api['id'], $t0);
+                throw $e;
+            }
+            self::mark((int)$api['id'], $t0);
+            return $result;
         }
 
+        $builtin = null;
         if (DouyinParser::supports($text)) {
-            return (new DouyinParser())->parse($text);
+            $builtin = new DouyinParser();
+        } elseif (KuaishouParser::supports($text)) {
+            $builtin = new KuaishouParser();
         }
-        if (KuaishouParser::supports($text)) {
-            return (new KuaishouParser())->parse($text);
+        if ($builtin) {
+            try {
+                $result = $builtin->parse($text);
+            } catch (Throwable $e) {
+                self::mark(0, $t0);
+                throw $e;
+            }
+            self::mark(0, $t0);
+            return $result;
         }
 
+        self::mark(0, $t0);
         throw new RuntimeException('暂不支持该平台，请在后台配置对应解析接口');
     }
 

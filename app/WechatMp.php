@@ -23,6 +23,45 @@ class WechatMp
         return max(1, (int)setting('wxmp_checkin_points', 1));
     }
 
+    /** 连续签到额外奖励阶梯（返回应加的点数） */
+    public static function streakBonus($streak)
+    {
+        $streak = (int)$streak;
+        if ($streak >= 30) {
+            return 5;
+        }
+        if ($streak >= 15) {
+            return 3;
+        }
+        if ($streak >= 7) {
+            return 2;
+        }
+        if ($streak >= 3) {
+            return 1;
+        }
+        return 0;
+    }
+
+    /** 计算截至昨天已连续签到的天数（不含今天） */
+    public static function currentStreak($userId)
+    {
+        $rows = DB::all(
+            'SELECT DISTINCT checkin_date FROM wx_checkins WHERE user_id=? AND checkin_date < ? ORDER BY checkin_date DESC LIMIT 60',
+            [(int)$userId, date('Y-m-d')]
+        );
+        $dates = [];
+        foreach ($rows as $r) {
+            $dates[(string)$r['checkin_date']] = true;
+        }
+        $cursor = date('Y-m-d', strtotime('-1 day'));
+        $streak = 0;
+        while (isset($dates[$cursor])) {
+            $streak++;
+            $cursor = date('Y-m-d', strtotime($cursor . ' -1 day'));
+        }
+        return $streak;
+    }
+
     public static function verifySignature($token, $signature, $timestamp, $nonce)
     {
         $arr = [(string)$token, (string)$timestamp, (string)$nonce];
@@ -275,6 +314,9 @@ class WechatMp
         }
 
         $points = self::checkinPoints();
+        $streak = self::currentStreak((int)$user['id']);
+        $bonus = self::streakBonus($streak);
+        $points += $bonus;
         try {
             DB::pdo()->beginTransaction();
             $dup = DB::one('SELECT id, points FROM wx_checkins WHERE user_id=? AND checkin_date=? FOR UPDATE', [(int)$user['id'], $today]);
@@ -302,7 +344,22 @@ class WechatMp
 
         $fresh = DB::one('SELECT points FROM users WHERE id=?', [(int)$user['id']]);
         $bal = $fresh ? (int)$fresh['points'] : 0;
-        return '签到成功，账号「' . $user['username'] . '」获得 ' . $points . ' 点，当前余额 ' . $bal . ' 点。';
+        $msg = '签到成功，账号「' . $user['username'] . '」获得 ' . $points . ' 点';
+        if ($bonus > 0) {
+            $msg .= '（含连续签到 ' . ($streak + 1) . ' 天奖励 ' . $bonus . ' 点）';
+        }
+        $msg .= '，当前余额 ' . $bal . ' 点。';
+        return $msg;
+    }
+
+    /** 只读查询当前有效绑定码（不生成、不清理，供 me 接口无副作用使用） */
+    public static function activeBindCode($userId)
+    {
+        $row = DB::one(
+            'SELECT code, expires_at FROM wx_bind_codes WHERE user_id=? AND used_at IS NULL AND expires_at>=NOW() ORDER BY id DESC LIMIT 1',
+            [(int)$userId]
+        );
+        return $row ?: ['code' => '', 'expires_at' => ''];
     }
 
     public static function issueBindCode($userId)

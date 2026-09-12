@@ -106,6 +106,35 @@ function add_points($userId, $points)
     return DB::execute('UPDATE users SET points=points+?, total_points=total_points+? WHERE id=?', [$points, $points, $userId]);
 }
 
+/** 邀请注册奖励：给邀请人加点数，返回实际奖励（0=未开启） */
+function reward_invite_register($inviterId)
+{
+    $r = max(0, (int)setting('invite_reward_register', 0));
+    if ($r > 0 && (int)$inviterId > 0) {
+        add_points((int)$inviterId, $r);
+    }
+    return $r;
+}
+
+/** 邀请首充奖励：被邀请人首次充值时给邀请人加点数（幂等） */
+function reward_invite_recharge($invitedUserId)
+{
+    $r = max(0, (int)setting('invite_reward_recharge', 0));
+    if ($r <= 0) {
+        return 0;
+    }
+    $invitedUserId = (int)$invitedUserId;
+    $inviterId = (int)DB::scalar('SELECT inviter_id FROM users WHERE id=?', [$invitedUserId]);
+    if ($inviterId <= 0) {
+        return 0;
+    }
+    $updated = DB::execute('UPDATE users SET invite_rewarded=1 WHERE id=? AND invite_rewarded=0', [$invitedUserId]);
+    if ($updated) {
+        add_points($inviterId, $r);
+    }
+    return $updated ? $r : 0;
+}
+
 /** 扣点数（原子操作，余额不足返回 false） */
 function deduct_points($userId, $points)
 {

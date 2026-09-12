@@ -278,7 +278,7 @@
         if (!d.list.length) { $('usersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
         else {
           $('usersTable').innerHTML =
-            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>微信</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>IP地址</th><th>操作</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>微信</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>IP地址</th><th>地址</th><th>邀请人</th><th>操作</th></tr></thead><tbody>' +
             d.list.map(function (u) {
               return '<tr>' +
                 '<td>' + u.id + '</td>' +
@@ -291,6 +291,8 @@
                 '<td>' + esc(u.created_at) + '</td>' +
                 '<td>' + esc(u.last_login_at || '-') + '</td>' +
                 '<td>' + esc(u.last_login_ip || '-') + '</td>' +
+                '<td>' + esc(u.location || '-') + '</td>' +
+                '<td>' + (u.inviter_name ? esc(u.inviter_name) + (u.invited_count ? '（邀' + u.invited_count + '人）' : '') : '-') + '</td>' +
                 '<td>' +
                   '<button class="btn btn-sm" data-user-action="add" data-id="' + u.id + '">加点</button> ' +
                   '<button class="btn btn-sm" data-user-action="deduct" data-id="' + u.id + '">扣点</button> ' +
@@ -539,10 +541,10 @@
       $('set_epay_api').value = d.epay_api;
       $('set_epay_pid').value = d.epay_pid;
       $('set_epay_public_key').value = d.epay_public_key;
-      $('set_epay_private_key').value = d.epay_private_key;
+      fillSecret('set_epay_private_key', d.epay_private_key);
       $('set_alipay_enabled').value = d.alipay_enabled;
       $('set_alipay_app_id').value = d.alipay_app_id;
-      $('set_alipay_private_key').value = d.alipay_private_key;
+      fillSecret('set_alipay_private_key', d.alipay_private_key);
       $('set_alipay_public_key').value = d.alipay_public_key;
       $('set_wechat_enabled').value = d.wechat_enabled;
       $('set_wechat_name').value = d.wechat_name;
@@ -550,14 +552,16 @@
       $('set_wechat_desc').value = d.wechat_desc;
       $('set_wxmp_enabled').value = d.wxmp_enabled;
       $('set_wxmp_appid').value = d.wxmp_appid;
-      $('set_wxmp_secret').value = d.wxmp_secret;
+      fillSecret('set_wxmp_secret', d.wxmp_secret);
       $('set_wxmp_token').value = d.wxmp_token;
       $('set_wxmp_checkin_points').value = d.wxmp_checkin_points || '1';
+      $('set_invite_reward_register').value = d.invite_reward_register || '0';
+      $('set_invite_reward_recharge').value = d.invite_reward_recharge || '0';
       if ($('wxmpCallbackUrl')) $('wxmpCallbackUrl').textContent = d.wxmp_callback || '—';
       $('set_site_version').textContent = d.site_version || '—';
       $('set_bark_enabled').value = d.bark_enabled;
       $('set_bark_server').value = d.bark_server;
-      $('set_bark_key').value = d.bark_key;
+      fillSecret('set_bark_key', d.bark_key);
       $('set_bark_sound').value = d.bark_sound;
       $('set_bark_notify_register').value = d.bark_notify_register;
       $('set_bark_notify_recharge').value = d.bark_notify_recharge;
@@ -571,6 +575,13 @@
     var p = {};
     keys.forEach(function (k) { p[k] = $('set_' + k).value.trim(); });
     return p;
+  }
+
+  function fillSecret(id, val) {
+    var el = $(id);
+    if (!el) return;
+    el.value = '';
+    el.placeholder = (val === '__SET__') ? '已配置，留空则不修改' : '';
   }
   $('saveSettingsBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
@@ -597,6 +608,15 @@
       if (!checkAuth(res)) return;
       if (res.code !== 0) { toast(res.msg); return; }
       toast('签到配置已保存');
+    });
+  });
+  $('saveInviteBtn').addEventListener('click', function () {
+    adminApi('save_settings', collectSettings(
+      ['invite_reward_register', 'invite_reward_recharge']
+    )).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast('邀请设置已保存');
     });
   });
   $('wxmpMenuBtn').addEventListener('click', function () {
@@ -941,6 +961,13 @@
   $('verModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
 
   /* ---------- 接口管理 ---------- */
+  function apiSuccessRate(a) {
+    if (!a.total_calls) return '<span class="muted">-</span>';
+    var p = Math.round(a.success_calls / a.total_calls * 100);
+    var cls = p >= 90 ? 'rate-ok' : (p >= 60 ? 'rate-warn' : 'rate-bad');
+    return '<span class="' + cls + '">' + p + '%</span>';
+  }
+
   function loadApis(page, q) {
     state.page = page || 1;
     adminApi('apis', { page: state.page, q: q || $('apiSearch').value.trim() })
@@ -951,17 +978,20 @@
         else {
           d.list.forEach(function (a) { apiDataCache[a.id] = a; });
           $('apisTable').innerHTML =
-            '<div class="table-wrap"><table><thead><tr><th>接口ID</th><th>接口名称</th><th>接口图片</th><th>接口标识</th><th>解析类型</th><th>接口状态</th><th>操作</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table><thead><tr><th>接口ID</th><th>接口名称</th><th>接口图片</th><th>接口标识</th><th>解析类型</th><th>成功率</th><th>平均耗时</th><th>接口状态</th><th>操作</th></tr></thead><tbody>' +
             d.list.map(function (a) {
               var icon = a.icon
                 ? '<img class="api-icon" src="' + esc(a.icon) + '" alt="">'
                 : '<span class="api-icon"></span>';
+              var rate = apiSuccessRate(a);
               return '<tr>' +
                 '<td>' + a.id + '</td>' +
                 '<td>' + esc(a.name) + '</td>' +
                 '<td>' + icon + '</td>' +
                 '<td><code>' + esc(a.slug) + '</code></td>' +
                 '<td>' + (parseTypeName(a.parse_type)) + '</td>' +
+                '<td>' + rate + '</td>' +
+                '<td>' + (a.total_calls ? (a.avg_ms + ' ms') : '<span class="muted">-</span>') + '</td>' +
                 '<td><label class="switch"><input type="checkbox" data-api-toggle="' + a.id + '"' + (a.enabled == 1 ? ' checked' : '') + '><span class="slider"></span></label></td>' +
                 '<td>' +
                   '<button class="btn btn-sm" data-api-edit="' + a.id + '">编辑</button> ' +

@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260910">
+<link rel="stylesheet" href="assets/css/style.css?v=20260912">
 </head>
 <body>
 
@@ -268,6 +268,7 @@ $csrf = csrf_token();
         <div class="ud-row"><span class="ud-row-label">邮箱</span><span class="ud-row-val" id="drawerEmail">未绑定</span></div>
         <div class="ud-row"><span class="ud-row-label">微信</span><span class="ud-row-val" id="drawerWx">未绑定</span></div>
         <div class="ud-row hide" id="drawerWxCheckinRow"><span class="ud-row-label">今日签到</span><span class="ud-row-val" id="drawerWxCheckin">未签到</span></div>
+        <div class="ud-row"><span class="ud-row-label">已邀请</span><span class="ud-row-val" id="drawerInviteCount">0 人</span></div>
         <div class="ud-row"><span class="ud-row-label">注册时间</span><span class="ud-row-val" id="drawerCreated">—</span></div>
       </div>
       <div class="ud-form-card" id="drawerWxCard">
@@ -280,6 +281,12 @@ $csrf = csrf_token();
         </div>
         <button class="btn btn-primary btn-block" id="drawerWxBind" type="button">刷新绑定码</button>
         <button class="btn btn-ghost btn-block hide" id="drawerWxUnbind" type="button">解绑微信</button>
+      </div>
+      <div class="ud-form-card" id="drawerInviteCard">
+        <div class="ud-form-title">邀请好友</div>
+        <p class="ud-form-hint" id="drawerInviteHint">邀请好友注册，一起使用本工具。</p>
+        <input class="field" id="drawerInviteLink" type="text" readonly>
+        <button class="btn btn-primary btn-block" id="drawerInviteCopy" type="button">复制邀请链接</button>
       </div>
       <div class="ud-actions">
         <button class="btn btn-primary btn-block" id="drawerRecharge" type="button">充值</button>
@@ -417,6 +424,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260910"></script>
+<script src="assets/js/app.js?v=20260912"></script>
 </body>
 </html>

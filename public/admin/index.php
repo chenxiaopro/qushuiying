@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../app/init.php';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>后台管理 - <?= htmlspecialchars(setting('site_name', '短视频去水印')) ?></title>
-<link rel="stylesheet" href="../assets/css/admin.css?v=20260912b">
+<link rel="stylesheet" href="../assets/css/admin.css?v=20260912c">
 </head>
 <body>
 
@@ -292,6 +292,22 @@ require_once __DIR__ . '/../../app/init.php';
         <div class="hide" id="wxmpCheckResult" style="margin-top:14px;font-size:13px"></div>
       </div>
 
+      <div class="page-title">邀请返利</div>
+      <div class="card">
+        <div class="page-sub" style="margin-bottom:14px">用户中心会展示专属邀请链接（?invite=用户ID）。好友通过链接注册、完成首次充值后，邀请人可获得对应奖励。填 0 表示关闭该项奖励。</div>
+        <div class="form-grid">
+          <div>
+            <label>好友注册奖励（点）</label>
+            <input class="field" id="set_invite_reward_register" type="number" min="0" placeholder="0">
+          </div>
+          <div>
+            <label>好友首充奖励（点）</label>
+            <input class="field" id="set_invite_reward_recharge" type="number" min="0" placeholder="0">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="saveInviteBtn" style="margin-top:16px">保存邀请设置</button>
+      </div>
+
       <div class="page-title">微信 / QQ 分享卡片</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">好友、群、朋友圈、QQ 空间识别链接时展示的标题、描述和封面图。留空则回退到站点名称与站点描述。封面图请使用可公网访问的完整图片 URL（建议 300x300 以上）。</div>
@@ -568,6 +584,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260912b"></script>
+<script src="../assets/js/admin.js?v=20260912c"></script>
 </body>
 </html>

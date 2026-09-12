@@ -108,10 +108,17 @@ function api_register()
         fail('用户名已存在');
     }
 
+    $inviterId = (int)input('invite', 0);
+    if ($inviterId > 0 && !DB::one('SELECT id FROM users WHERE id=? AND status=1', [$inviterId])) {
+        $inviterId = 0;
+    }
+
     $registerPoints = max(0, (int)setting('register_points', 0));
-    DB::execute('INSERT INTO users(username,password,points,total_points,status) VALUES(?,?,?,?,1)', [
+    DB::execute('INSERT INTO users(username,password,points,total_points,status,inviter_id) VALUES(?,?,?,?,1,?)', [
         $username, password_hash($password, PASSWORD_DEFAULT), $registerPoints, $registerPoints,
+        $inviterId > 0 ? $inviterId : null,
     ]);
+    reward_invite_register($inviterId);
     NotifyBark::register($username);
     ok(['username' => $username, 'register_points' => $registerPoints, 'msg' => '注册成功']);
 }
@@ -186,9 +193,9 @@ function api_me()
         $data['wx_bind_expires'] = '';
         if (!$data['wx_bound'] && WechatMp::enabled()) {
             try {
-                $codeRow = WechatMp::issueBindCode((int)$u['id']);
-                $data['wx_bind_code'] = (string)$codeRow['code'];
-                $data['wx_bind_expires'] = (string)$codeRow['expires_at'];
+                $codeRow = WechatMp::activeBindCode((int)$u['id']);
+                $data['wx_bind_code'] = (string)($codeRow['code'] ?? '');
+                $data['wx_bind_expires'] = (string)($codeRow['expires_at'] ?? '');
             } catch (Throwable $e) {
                 $data['wx_bind_code'] = '';
                 $data['wx_bind_expires'] = '';
@@ -197,6 +204,9 @@ function api_me()
         $data['points'] = (int)$u['points'];
         $data['total_points'] = (int)($u['total_points'] ?? 0);
         $data['created_at'] = (string)($u['created_at'] ?? '');
+        $data['invite_count'] = (int)DB::scalar('SELECT COUNT(*) FROM users WHERE inviter_id=?', [(int)$u['id']]);
+        $data['invite_reward_register'] = (int)setting('invite_reward_register', 0);
+        $data['invite_reward_recharge'] = (int)setting('invite_reward_recharge', 0);
     } elseif ($u && (int)$u['status'] !== 1) {
         unset($_SESSION['user_id']);
     }
@@ -213,6 +223,10 @@ function api_parse()
 {
     $u = require_login();
     check_parse_rate_limit($u['id']);
+    rate_limit_ip('parse', 20, 60);
+    if (rate_limit_locked('parse_fail:' . client_ip(), 30, 600)) {
+        fail('解析请求过于频繁，请稍后再试', 429);
+    }
 
     $text = trim((string)input('text', ''));
     if (mb_strlen($text) > 5000) {
@@ -229,8 +243,9 @@ function api_parse()
     try {
         $result = ParserFactory::parse($text, $mode !== '' ? $mode : null);
     } catch (RuntimeException $e) {
-        DB::execute('INSERT INTO parse_logs(user_id,text,platform,cost,ip,created_at) VALUES(?,?,?,?,?,NOW())', [
-            $u['id'], $text, $platform, 0, client_ip(),
+        rate_limit_attempt('parse_fail:' . client_ip(), 30, 600);
+        DB::execute('INSERT INTO parse_logs(user_id,text,platform,api_id,success,duration_ms,cost,ip,created_at) VALUES(?,?,?,?,0,?,?,?,NOW())', [
+            $u['id'], $text, $platform, ParserFactory::lastApiId(), ParserFactory::lastDurationMs(), 0, client_ip(),
         ]);
         fail($e->getMessage(), 1);
     }
@@ -242,8 +257,9 @@ function api_parse()
             DB::pdo()->rollBack();
             fail('点数不足，请先充值', 402);
         }
-        DB::execute('INSERT INTO parse_logs(user_id,text,platform,title,cover,video_url,cost,ip,created_at) VALUES(?,?,?,?,?,?,?,?,NOW())', [
-            $u['id'], $text, $result['platform'], $result['title'] ?? '', $result['cover'] ?? '',
+        DB::execute('INSERT INTO parse_logs(user_id,text,platform,api_id,success,duration_ms,title,cover,video_url,cost,ip,created_at) VALUES(?,?,?,?,1,?,?,?,?,?,?,NOW())', [
+            $u['id'], $text, $result['platform'], ParserFactory::lastApiId(), ParserFactory::lastDurationMs(),
+            $result['title'] ?? '', $result['cover'] ?? '',
             $result['video_url'] ?? '', $cost, client_ip(),
         ]);
         DB::pdo()->commit();
@@ -259,6 +275,48 @@ function api_parse()
         $result['music'] = ['title' => '', 'author' => '', 'cover' => '', 'url' => $mu];
     }
     $left = (int)DB::scalar('SELECT points FROM users WHERE id=?', [$u['id']]);
+
+    // 为返回的直链生成下载签名令牌，防止 download.php 被当作免费代理滥用
+    $urls = [];
+    foreach (['video_url'] as $k) {
+        if (!empty($result[$k]) && is_string($result[$k])) {
+            $urls[] = $result[$k];
+        }
+    }
+    if (!empty($result['music']['url']) && is_string($result['music']['url'])) {
+        $urls[] = $result['music']['url'];
+    }
+    foreach (['images', 'video_backup', 'live'] as $k) {
+        if (is_array($result[$k] ?? null)) {
+            foreach ($result[$k] as $item) {
+                if (is_string($item) && $item !== '') {
+                    $urls[] = $item;
+                }
+            }
+        }
+    }
+    foreach (($result['list'] ?? []) as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        if (!empty($item['video_url']) && is_string($item['video_url'])) {
+            $urls[] = $item['video_url'];
+        }
+        if (is_array($item['images'] ?? null)) {
+            foreach ($item['images'] as $img) {
+                if (is_string($img) && $img !== '') {
+                    $urls[] = $img;
+                }
+            }
+        }
+    }
+    $tokens = [];
+    foreach (array_values(array_unique(array_filter($urls))) as $url) {
+        if (preg_match('#^https?://#i', $url)) {
+            $tokens[$url] = download_token($u['id'], $url);
+        }
+    }
+
     ok([
         'result' => [
             'platform'     => $result['platform'],
@@ -278,6 +336,7 @@ function api_parse()
         ],
         'cost'  => $cost,
         'points_left' => $left,
+        'tokens' => $tokens,
     ]);
 }
 
@@ -368,6 +427,7 @@ function api_recharge_card()
         }
         DB::execute('UPDATE cards SET status=1, used_by=?, used_at=NOW() WHERE id=?', [$u['id'], $card['id']]);
         add_points($u['id'], (int)$card['points']);
+        reward_invite_recharge((int)$u['id']);
         $left = (int)DB::scalar('SELECT points FROM users WHERE id=?', [$u['id']]);
         DB::pdo()->commit();
         ok(['points' => (int)$card['points'], 'points_left' => $left]);

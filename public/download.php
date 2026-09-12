@@ -98,6 +98,13 @@ if (!$host || is_private_host($host)) {
     exit('禁止访问该地址');
 }
 
+// 下载签名校验：令牌绑定当前用户与目标 URL，10 分钟有效，防止代理被滥用
+$token = trim((string)input('token', ''));
+if (!verify_download_token($u['id'], $url, $token)) {
+    http_response_code(403);
+    exit('下载链接已失效，请重新解析');
+}
+
 // 防盗链 Referer：部分 CDN 校验来源页，映射到对应平台首页
 $referer = referer_for_url($url);
 
@@ -174,6 +181,7 @@ curl_setopt_array($ch, http_ssl_opts(false) + [
         return $len;
     },
 ]);
+curl_set_ssrf_guard($ch);
 if ($range !== null) {
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Range: ' . $range]);
 }

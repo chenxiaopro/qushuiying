@@ -33,6 +33,7 @@ try {
             if ((int)$locked['status'] === 0) {
                 DB::execute('UPDATE orders SET status=1, trade_no=?, paid_at=NOW() WHERE id=?', [$info['trade_no'], $order['id']]);
                 add_points($order['user_id'], (int)$order['points']);
+                reward_invite_recharge((int)$order['user_id']);
                 $paid = true;
             }
             DB::pdo()->commit();

@@ -17,6 +17,11 @@ $GLOBALS['config'] = [
     // 初始程序版本号；站点当前版本由后台「历史版本」新增记录时按类型自动递增
     'app_version' => 'v1.3.0',
     'debug'    => false,
+    // 是否信任反向代理传递的 X-Forwarded-For / X-Real-IP 头（用于获取真实客户端 IP）
+    // 仅在站点部署于可信反代（如 Nginx 已强制覆写该头）之后才应设为 true，否则可被伪造绕过限流
+    'trust_proxy' => false,
+    // 下载签名密钥（用于生成 download.php 的下载令牌，生产环境请务必覆盖为随机字符串）
+    'app_secret' => '',
     // 管理员登录用 Cookie 有效期(秒)
     'session_ttl' => 7 * 86400,
 ];

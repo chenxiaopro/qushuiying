@@ -11,6 +11,9 @@ class DB
     /** @var PDO|null */
     private static $pdo = null;
 
+    /** schema 版本：新增迁移时递增，避免每次请求都全量探测 */
+    const SCHEMA_VERSION = '3';
+
     public static function pdo()
     {
         if (self::$pdo === null) {
@@ -22,9 +25,33 @@ class DB
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ];
             self::$pdo = new PDO($dsn, $c['user'], $c['pass'], $opt);
-            self::ensureSchema();
+            if (!self::schemaUpToDate()) {
+                self::ensureSchema();
+                self::setSchemaVersion();
+            }
         }
         return self::$pdo;
+    }
+
+    /** 判断 schema 是否已是最新（无该标记或版本落后则需迁移） */
+    private static function schemaUpToDate()
+    {
+        try {
+            $v = self::$pdo->query("SELECT v FROM settings WHERE k='schema_version'")->fetchColumn();
+            return (string)$v === self::SCHEMA_VERSION;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    /** 写入当前 schema 版本标记 */
+    private static function setSchemaVersion()
+    {
+        try {
+            self::$pdo->exec("INSERT INTO settings(k,v) VALUES('schema_version'," . self::$pdo->quote(self::SCHEMA_VERSION) . ") ON DUPLICATE KEY UPDATE v=VALUES(v)");
+        } catch (Throwable $e) {
+            // 忽略
+        }
     }
 
     /** 覆盖部署后的自动迁移：补齐 apis.parse_type 字段与 parse_types 表及默认种子 */
@@ -167,7 +194,35 @@ class DB
         }
         try {
             self::$pdo->exec("INSERT IGNORE INTO `settings` (`k`,`v`) VALUES
-                ('wxmp_enabled','0'),('wxmp_appid',''),('wxmp_secret',''),('wxmp_token',''),('wxmp_checkin_points','1')");
+                ('wxmp_enabled','0'),('wxmp_appid',''),('wxmp_secret',''),('wxmp_token',''),('wxmp_checkin_points','1'),
+                ('invite_reward_register','0'),('invite_reward_recharge','0')");
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `parse_logs` LIKE 'api_id'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `parse_logs`
+                    ADD COLUMN `api_id` INT UNSIGNED NULL COMMENT '使用的接口ID(0=内置解析器)',
+                    ADD COLUMN `success` TINYINT NOT NULL DEFAULT 1 COMMENT '1成功 0失败',
+                    ADD COLUMN `duration_ms` INT NOT NULL DEFAULT 0 COMMENT '解析耗时(毫秒)'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `users` LIKE 'inviter_id'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `users` ADD COLUMN `inviter_id` INT UNSIGNED NULL COMMENT '邀请人用户ID'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `users` LIKE 'invite_rewarded'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `users` ADD COLUMN `invite_rewarded` TINYINT NOT NULL DEFAULT 0 COMMENT '首充邀请奖励是否已发放(0未 1已)'");
+            }
         } catch (Throwable $e) {
             // 忽略
         }
