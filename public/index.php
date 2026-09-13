@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260905e">
+<link rel="stylesheet" href="assets/css/style.css?v=20260913">
 </head>
 <body>
 
@@ -120,7 +120,6 @@ $csrf = csrf_token();
       <div class="parse-type-wrap">
         <label class="parse-type-label" for="parseType">解析类型</label>
         <select id="parseType" class="parse-type">
-          <option value="">自动识别</option>
         </select>
       </div>
       <button class="btn btn-primary btn-parse" id="btnParse" type="button">立即解析</button>
@@ -201,7 +200,10 @@ $csrf = csrf_token();
 <!-- 网站公告弹窗 -->
 <div class="modal-mask hide" id="announcementModal">
   <div class="modal">
-    <div class="modal-title">网站公告</div>
+    <div class="modal-head">
+      <div class="modal-title">网站公告</div>
+      <button class="modal-close" type="button" data-modal-close="announcementModal" aria-label="关闭">×</button>
+    </div>
     <div class="announcement-modal-body"><?= nl2br(htmlspecialchars($announcement)) ?></div>
     <button class="btn btn-primary btn-block" id="announcementCloseBtn" style="margin-top:16px">我知道了</button>
   </div>
@@ -212,7 +214,10 @@ $csrf = csrf_token();
 <!-- 公众号引导弹窗 -->
 <div class="modal-mask hide" id="wechatModal">
   <div class="modal wechat-modal">
-    <div class="modal-title">关注公众号</div>
+    <div class="modal-head">
+      <div class="modal-title">关注公众号</div>
+      <button class="modal-close" type="button" data-modal-close="wechatModal" aria-label="关闭">×</button>
+    </div>
     <?php if ($wechatQrcode): ?>
     <div class="wechat-qrcode"><img src="<?= htmlspecialchars($wechatQrcode) ?>" alt="公众号二维码"></div>
     <?php endif; ?>
@@ -261,7 +266,27 @@ $csrf = csrf_token();
     <div class="user-panel" id="userPanelOverview">
       <div class="ud-rows">
         <div class="ud-row"><span class="ud-row-label">邮箱</span><span class="ud-row-val" id="drawerEmail">未绑定</span></div>
+        <div class="ud-row"><span class="ud-row-label">微信</span><span class="ud-row-val" id="drawerWx">未绑定</span></div>
+        <div class="ud-row hide" id="drawerWxCheckinRow"><span class="ud-row-label">今日签到</span><span class="ud-row-val" id="drawerWxCheckin">未签到</span></div>
+        <div class="ud-row"><span class="ud-row-label">已邀请</span><span class="ud-row-val" id="drawerInviteCount">0 人</span></div>
         <div class="ud-row"><span class="ud-row-label">注册时间</span><span class="ud-row-val" id="drawerCreated">—</span></div>
+      </div>
+      <div class="ud-form-card" id="drawerWxCard">
+        <div class="ud-form-title">绑定微信</div>
+        <p class="ud-form-hint" id="drawerWxHint">把下面 6 位绑定码发给公众号，即可绑定并每日签到领点。</p>
+        <div class="ud-wx-code hide" id="drawerWxCodeWrap">
+          <div class="ud-wx-code-val" id="drawerWxCode">————</div>
+          <div class="ud-wx-code-meta" id="drawerWxCodeMeta"></div>
+          <button class="btn btn-ghost btn-block" id="drawerWxCopy" type="button">复制绑定码</button>
+        </div>
+        <button class="btn btn-primary btn-block" id="drawerWxBind" type="button">刷新绑定码</button>
+        <button class="btn btn-ghost btn-block hide" id="drawerWxUnbind" type="button">解绑微信</button>
+      </div>
+      <div class="ud-form-card" id="drawerInviteCard">
+        <div class="ud-form-title">邀请好友</div>
+        <p class="ud-form-hint" id="drawerInviteHint">邀请好友注册，一起使用本工具。</p>
+        <input class="field" id="drawerInviteLink" type="text" readonly>
+        <button class="btn btn-primary btn-block" id="drawerInviteCopy" type="button">复制邀请链接</button>
       </div>
       <div class="ud-actions">
         <button class="btn btn-primary btn-block" id="drawerRecharge" type="button">充值</button>
@@ -298,7 +323,10 @@ $csrf = csrf_token();
 <!-- 登录弹窗 -->
 <div class="modal-mask hide" id="loginModal">
   <div class="modal">
-    <div class="modal-title">登录</div>
+    <div class="modal-head">
+      <div class="modal-title">登录</div>
+      <button class="modal-close" type="button" data-modal-close="loginModal" aria-label="关闭">×</button>
+    </div>
     <label class="field-label">用户名</label>
     <input class="field" id="loginUser" maxlength="20">
     <label class="field-label">密码</label>
@@ -314,7 +342,10 @@ $csrf = csrf_token();
 <!-- 注册弹窗 -->
 <div class="modal-mask hide" id="registerModal">
   <div class="modal">
-    <div class="modal-title">注册</div>
+    <div class="modal-head">
+      <div class="modal-title">注册</div>
+      <button class="modal-close" type="button" data-modal-close="registerModal" aria-label="关闭">×</button>
+    </div>
     <?php if ($registerPoints > 0): ?>
     <div class="register-bonus">注册即送 <b><?= $registerPoints ?></b> 点体验点数</div>
     <?php endif; ?>
@@ -330,7 +361,10 @@ $csrf = csrf_token();
 <!-- 充值弹窗 -->
 <div class="modal-mask hide" id="rechargeModal">
   <div class="modal modal-lg">
-    <div class="modal-title">充值中心</div>
+    <div class="modal-head">
+      <div class="modal-title">充值中心</div>
+      <button class="modal-close" type="button" data-modal-close="rechargeModal" aria-label="关闭">×</button>
+    </div>
 
     <div class="recharge-tabs">
       <?php if ($onlinePayEnabled): ?><span class="tab active" data-tab="pay">在线支付</span><?php endif; ?>
@@ -390,6 +424,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260905e"></script>
+<script src="assets/js/app.js?v=20260913"></script>
 </body>
 </html>

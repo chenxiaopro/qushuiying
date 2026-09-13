@@ -110,6 +110,66 @@ function rate_limit_ip($action, $max, $window)
     fclose($fp);
 }
 
+/** 是否已触发限流（按任意 key 计数，供账号级失败锁定使用） */
+function rate_limit_locked($key, $max, $window)
+{
+    $file = sys_get_temp_dir() . '/wm_rl_' . hash('sha256', (string)$key);
+    $now = time();
+    $fp = fopen($file, 'c+');
+    if ($fp === false) {
+        return false;
+    }
+    flock($fp, LOCK_EX);
+    $raw = stream_get_contents($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    if ($raw === false || $raw === '') {
+        return false;
+    }
+    $hits = array_values(array_filter(json_decode($raw, true) ?: [], function ($t) use ($now, $window) {
+        return (int)$t > ($now - $window);
+    }));
+    return count($hits) >= $max;
+}
+
+/** 记录一次事件，返回记录后是否达到锁定阈值 */
+function rate_limit_attempt($key, $max, $window)
+{
+    $file = sys_get_temp_dir() . '/wm_rl_' . hash('sha256', (string)$key);
+    $now = time();
+    $fp = fopen($file, 'c+');
+    if ($fp === false) {
+        return false;
+    }
+    flock($fp, LOCK_EX);
+    $raw = stream_get_contents($fp);
+    $hits = ($raw === false || $raw === '') ? [] : (json_decode($raw, true) ?: []);
+    $hits = array_values(array_filter($hits, function ($t) use ($now, $window) {
+        return (int)$t > ($now - $window);
+    }));
+    $hits[] = $now;
+    ftruncate($fp, 0);
+    rewind($fp);
+    fwrite($fp, json_encode($hits));
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return count($hits) >= $max;
+}
+
+/** 清除限流计数（登录成功后调用，避免成功登录累积触发锁定） */
+function rate_limit_reset($key)
+{
+    $file = sys_get_temp_dir() . '/wm_rl_' . hash('sha256', (string)$key);
+    $fp = @fopen($file, 'c+');
+    if ($fp === false) {
+        return;
+    }
+    flock($fp, LOCK_EX);
+    ftruncate($fp, 0);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+}
+
 /** 安全获取请求参数 */
 function input($key, $default = null)
 {
@@ -117,18 +177,21 @@ function input($key, $default = null)
     return $v;
 }
 
-/** 客户端 IP */
+/** 客户端 IP（仅在配置了可信反向代理时才信任转发头，防止伪造 IP 绕过限流） */
 function client_ip()
 {
-    foreach (['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'] as $h) {
-        if (!empty($_SERVER[$h])) {
-            $ip = trim(explode(',', $_SERVER[$h])[0]);
-            if (filter_var($ip, FILTER_VALIDATE_IP)) {
-                return $ip;
+    if (cfg('trust_proxy')) {
+        foreach (['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'] as $h) {
+            if (!empty($_SERVER[$h])) {
+                $ip = trim(explode(',', $_SERVER[$h])[0]);
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
+                }
             }
         }
     }
-    return '0.0.0.0';
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
 }
 
 /** 生成唯一订单号 */
@@ -137,10 +200,62 @@ function gen_order_sn()
     return date('YmdHis') . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 8));
 }
 
-/** 生成卡密 */
+/** 生成卡密（密码学安全随机） */
 function gen_card()
 {
-    return strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 16));
+    return strtoupper(bin2hex(random_bytes(8)));
+}
+
+/** base64url 编码（用于下载令牌） */
+function base64url_encode($s)
+{
+    return rtrim(strtr(base64_encode((string)$s), '+/', '-_'), '=');
+}
+
+/** base64url 解码 */
+function base64url_decode($s)
+{
+    return base64_decode(strtr((string)$s, '-_', '+/'));
+}
+
+/** 下载签名密钥（生产环境请在 config.local.php 覆盖 app_secret） */
+function download_secret()
+{
+    $s = trim((string)cfg('app_secret', ''));
+    return $s !== '' ? $s : 'wm-download-secret';
+}
+
+/** 生成下载令牌：绑定用户与目标 URL，默认 10 分钟有效 */
+function download_token($userId, $url, $ttl = 600)
+{
+    $exp = time() + (int)$ttl;
+    $payload = (int)$userId . '|' . $exp . '|' . (string)$url;
+    $sig = hash_hmac('sha256', $payload, download_secret());
+    return base64url_encode($exp . '|' . $sig);
+}
+
+/** 校验下载令牌是否合法且未过期 */
+function verify_download_token($userId, $url, $token)
+{
+    $token = (string)$token;
+    if ($token === '') {
+        return false;
+    }
+    $raw = base64url_decode($token);
+    if ($raw === false) {
+        return false;
+    }
+    $parts = explode('|', $raw, 2);
+    if (count($parts) !== 2) {
+        return false;
+    }
+    $exp = (int)$parts[0];
+    $sig = (string)$parts[1];
+    if ($exp < time()) {
+        return false;
+    }
+    $payload = (int)$userId . '|' . $exp . '|' . (string)$url;
+    return hash_equals(hash_hmac('sha256', $payload, download_secret()), $sig);
 }
 
 /** 清理过期未支付订单（超过 1 天未支付，不影响已支付/已关闭） */
@@ -189,6 +304,36 @@ function http_ssl_compat_error($err)
         || strpos($e, 'certificate') !== false;
 }
 
+/** 从 curl opensocket 回调的 "host:port" 地址中提取 host */
+function parse_host_from_sockaddr($address)
+{
+    $addr = trim((string)$address);
+    if ($addr === '') {
+        return '';
+    }
+    if ($addr[0] === '[') {
+        $pos = strpos($addr, ']');
+        return $pos === false ? '' : substr($addr, 1, $pos - 1);
+    }
+    $pos = strrpos($addr, ':');
+    return $pos === false ? $addr : substr($addr, 0, $pos);
+}
+
+/** 给 curl 安装 SSRF 逐跳防护：每次建立连接（含重定向目标）都校验非内网地址 */
+function curl_set_ssrf_guard($ch)
+{
+    if (!defined('CURLOPT_OPENSOCKETFUNCTION')) {
+        return;
+    }
+    curl_setopt($ch, CURLOPT_OPENSOCKETFUNCTION, function ($c, $purpose, $address) {
+        $host = parse_host_from_sockaddr($address);
+        if ($host !== '' && is_private_host($host)) {
+            return defined('CURLE_ABORTED_BY_CALLBACK') ? CURLE_ABORTED_BY_CALLBACK : 42;
+        }
+        return null;
+    });
+}
+
 /** curl GET */
 function http_get($url, $headers = [], $timeout = 15)
 {
@@ -218,6 +363,7 @@ function http_request($method, $url, $body = null, $headers = [], $timeout = 15,
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
         ]);
+        curl_set_ssrf_guard($ch);
         $hs = array_merge(['Accept: */*'], $headers);
         if ($body !== null) {
             if ($method === 'POST') {
@@ -268,6 +414,7 @@ function get_final_url($url, $timeout = 12)
             CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
         ]);
+        curl_set_ssrf_guard($ch);
         curl_exec($ch);
         $err = curl_error($ch);
         $final = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);

@@ -10,14 +10,17 @@ require_once __DIR__ . '/../../app/init.php';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>后台管理 - <?= htmlspecialchars(setting('site_name', '短视频去水印')) ?></title>
-<link rel="stylesheet" href="../assets/css/admin.css?v=20260903a">
+<link rel="stylesheet" href="../assets/css/admin.css?v=20260913">
 </head>
 <body>
 
 <!-- 登录 -->
 <div id="loginView" class="login-wrap">
   <div class="login-box">
-    <h2>后台管理登录</h2>
+    <div class="login-brand">
+      <span class="brand-logo">管</span>
+      <h2>后台管理登录</h2>
+    </div>
     <input class="field" id="adminUser" placeholder="管理员账号" maxlength="20">
     <input class="field" id="adminPass" type="password" placeholder="密码" maxlength="32">
     <button class="btn btn-primary btn-block" id="adminLoginBtn">登 录</button>
@@ -27,7 +30,7 @@ require_once __DIR__ . '/../../app/init.php';
 <!-- 主界面 -->
 <div id="appView" class="layout hide">
   <aside class="sidebar">
-    <div class="brand"><span class="brand-logo"></span>后台管理</div>
+    <div class="brand"><span class="brand-logo">管</span>后台管理</div>
     <nav class="nav-group">
       <div class="nav-title">仪表盘</div>
       <div class="nav-item active" data-page="dashboard">仪表盘</div>
@@ -41,6 +44,7 @@ require_once __DIR__ . '/../../app/init.php';
     <nav class="nav-group">
       <div class="nav-title">管理</div>
       <div class="nav-item" data-page="users">用户管理</div>
+      <div class="nav-item" data-page="userMap">用户分布</div>
       <div class="nav-item" data-page="orders">订单管理</div>
       <div class="nav-item" data-page="logs">解析记录</div>
     </nav>
@@ -60,6 +64,19 @@ require_once __DIR__ . '/../../app/init.php';
       <div class="card" style="margin-top:16px">
         <div class="page-sub" style="margin-bottom:8px">最近解析记录</div>
         <div id="recentParses"></div>
+      </div>
+    </div>
+
+    <!-- 用户分布 -->
+    <div class="page hide" data-name="userMap">
+      <div class="page-title">用户分布</div>
+      <div class="stats-grid" id="userGeoStats"></div>
+      <div class="card" style="margin-top:16px">
+        <div class="page-sub" style="margin-bottom:8px">省级分布 <span class="user-map-hint" id="userMapHint"></span></div>
+        <div class="user-map-layout">
+          <div class="user-map" id="userMap"></div>
+          <div class="user-map-rank" id="userMapRank"></div>
+        </div>
       </div>
     </div>
 
@@ -131,6 +148,10 @@ require_once __DIR__ . '/../../app/init.php';
     <div class="page hide" data-name="logs">
       <div class="page-title">解析记录</div>
       <div class="card">
+        <div class="toolbar">
+          <input class="field" id="logSearch" placeholder="搜索用户名 / 平台 / 内容">
+          <button class="btn btn-primary" id="logSearchBtn">搜索</button>
+        </div>
         <div id="logsTable"></div>
         <div class="pager" id="logsPager"></div>
       </div>
@@ -169,6 +190,17 @@ require_once __DIR__ . '/../../app/init.php';
     <!-- 设置 -->
     <div class="page hide" data-name="settings">
       <div class="page-title">站点设置</div>
+      <nav class="settings-toc">
+        <a href="#sec-basic">基础</a>
+        <a href="#sec-wechat">公众号弹窗</a>
+        <a href="#sec-wxmp">签到</a>
+        <a href="#sec-invite">邀请返利</a>
+        <a href="#sec-share">分享卡片</a>
+        <a href="#sec-epay">易支付</a>
+        <a href="#sec-alipay">当面付</a>
+        <a href="#sec-bark">Bark</a>
+      </nav>
+      <div class="page-title" id="sec-basic">基础设置</div>
       <div class="card">
         <div class="form-grid">
           <div>
@@ -206,7 +238,7 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveSettingsBtn" style="margin-top:16px">保存基础设置</button>
       </div>
 
-      <div class="page-title">公众号弹窗引导</div>
+      <div class="page-title" id="sec-wechat">公众号弹窗引导</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">开启后前台会弹出公众号引导弹窗，用户关闭后 7 天内不再显示</div>
         <div class="form-grid">
@@ -233,7 +265,65 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveWechatBtn" style="margin-top:16px">保存公众号设置</button>
       </div>
 
-      <div class="page-title">微信 / QQ 分享卡片</div>
+      <div class="page-title" id="sec-wxmp">公众号签到</div>
+      <div class="card">
+        <div class="page-sub" style="margin-bottom:14px">用户在网站生成绑定码，发给公众号完成绑定后，点击自定义菜单「每日签到」领取点数。请先在微信公众平台填写下方服务器 URL 与 Token。</div>
+        <div class="form-grid">
+          <div>
+            <label>签到功能开关</label>
+            <select class="field" id="set_wxmp_enabled">
+              <option value="0">关闭</option>
+              <option value="1">开启</option>
+            </select>
+          </div>
+          <div>
+            <label>每日签到点数</label>
+            <input class="field" id="set_wxmp_checkin_points" type="number" min="1" placeholder="1">
+          </div>
+          <div>
+            <label>AppID</label>
+            <input class="field" id="set_wxmp_appid" placeholder="wx开头的 AppID">
+          </div>
+          <div>
+            <label>AppSecret</label>
+            <input class="field" id="set_wxmp_secret" placeholder="公众号开发者密码">
+          </div>
+          <div>
+            <label>Token</label>
+            <input class="field" id="set_wxmp_token" placeholder="与公众平台服务器配置中的 Token 一致">
+          </div>
+        </div>
+        <div class="page-title" style="margin-top:18px">服务器配置</div>
+        <p style="font-size:13px;color:#8a90a3;line-height:1.8">
+          1. 先保存上方配置，再去公众平台「设置与开发 → 基本配置」启用服务器配置。<br>
+          2. URL 填：<code id="wxmpCallbackUrl">—</code>
+          <button class="btn btn-sm" type="button" id="wxmpCopyUrlBtn" style="margin-left:6px">复制</button><br>
+          3. Token 与上方一致，加密方式选「明文模式」，并在 IP 白名单填入服务器公网 IP。<br>
+          4. 提交验证成功后，点「创建自定义菜单」。关注用户重新进入公众号即可看到「每日签到」。
+        </p>
+        <button class="btn btn-primary" id="saveWxmpBtn" style="margin-top:16px">保存签到配置</button>
+        <button class="btn btn-ghost" id="wxmpCheckBtn" style="margin-top:16px;margin-left:8px">检测配置</button>
+        <button class="btn btn-ghost" id="wxmpMenuBtn" style="margin-top:16px;margin-left:8px">创建自定义菜单</button>
+        <div class="hide" id="wxmpCheckResult" style="margin-top:14px;font-size:13px"></div>
+      </div>
+
+      <div class="page-title" id="sec-invite">邀请返利</div>
+      <div class="card">
+        <div class="page-sub" style="margin-bottom:14px">用户中心会展示专属邀请链接（?invite=用户ID）。好友通过链接注册、完成首次充值后，邀请人可获得对应奖励。填 0 表示关闭该项奖励。</div>
+        <div class="form-grid">
+          <div>
+            <label>好友注册奖励（点）</label>
+            <input class="field" id="set_invite_reward_register" type="number" min="0" placeholder="0">
+          </div>
+          <div>
+            <label>好友首充奖励（点）</label>
+            <input class="field" id="set_invite_reward_recharge" type="number" min="0" placeholder="0">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="saveInviteBtn" style="margin-top:16px">保存邀请设置</button>
+      </div>
+
+      <div class="page-title" id="sec-share">微信 / QQ 分享卡片</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">好友、群、朋友圈、QQ 空间识别链接时展示的标题、描述和封面图。留空则回退到站点名称与站点描述。封面图请使用可公网访问的完整图片 URL（建议 300x300 以上）。</div>
         <div class="form-grid">
@@ -253,7 +343,7 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveShareBtn" style="margin-top:16px">保存分享设置</button>
       </div>
 
-      <div class="page-title">易支付配置</div>
+      <div class="page-title" id="sec-epay">易支付配置</div>
       <div class="card">
         <div class="form-grid">
           <div>
@@ -294,7 +384,7 @@ require_once __DIR__ . '/../../app/init.php';
         </p>
       </div>
 
-      <div class="page-title">支付宝当面付配置</div>
+      <div class="page-title" id="sec-alipay">支付宝当面付配置</div>
       <div class="card">
         <div class="form-grid">
           <div>
@@ -325,7 +415,7 @@ require_once __DIR__ . '/../../app/init.php';
         </p>
       </div>
 
-      <div class="page-title">Bark 通知配置</div>
+      <div class="page-title" id="sec-bark">Bark 通知配置</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">通过 Bark 向管理员推送「用户注册」「用户充值」通知。服务器地址留空使用官方 <code>https://api.day.app</code>。</div>
         <div class="form-grid">
@@ -478,7 +568,7 @@ require_once __DIR__ . '/../../app/init.php';
     <div class="form-grid">
       <div class="form-grid-full">
         <label>接口地址</label>
-        <input class="field" id="apiUrl" placeholder="远程请求接口地址，末尾以 url= 结尾">
+        <input class="field" id="apiUrl" placeholder="如 https://host/api?type=dsp&uid=xxx&key=xxx&url=（type=custom 会按解析类型改写）">
       </div>
       <div>
         <label>返回数组</label>
@@ -509,6 +599,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260905b"></script>
+<script src="../assets/js/admin.js?v=20260913"></script>
 </body>
 </html>

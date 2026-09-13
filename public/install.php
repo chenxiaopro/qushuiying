@@ -84,6 +84,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installed) {
             // 忽略
         }
 
+        try {
+            $cols = $pdo->query("SHOW COLUMNS FROM `users` LIKE 'wx_openid'")->fetchAll();
+            if (!$cols) {
+                $pdo->exec("ALTER TABLE `users` ADD COLUMN `wx_openid` VARCHAR(64) NULL COMMENT '微信公众号 OpenID'");
+            }
+            $idx = $pdo->query("SHOW INDEX FROM `users` WHERE Key_name='uk_wx_openid'")->fetchAll();
+            if (!$idx) {
+                $pdo->exec('ALTER TABLE `users` ADD UNIQUE KEY `uk_wx_openid` (`wx_openid`)');
+            }
+        } catch (Exception $e) {
+            // 忽略
+        }
+
         // 创建管理员（已存在则更新密码，避免重复安装时唯一键冲突）
         $stmt = $pdo->prepare('INSERT INTO admins(username,password,created_at) VALUES(?,?,NOW()) ON DUPLICATE KEY UPDATE password=VALUES(password)');
         $stmt->execute([$adminUser, password_hash($adminPass, PASSWORD_DEFAULT)]);

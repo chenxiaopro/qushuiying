@@ -11,6 +11,9 @@ class DB
     /** @var PDO|null */
     private static $pdo = null;
 
+    /** schema 版本：新增迁移时递增，避免每次请求都全量探测 */
+    const SCHEMA_VERSION = '3';
+
     public static function pdo()
     {
         if (self::$pdo === null) {
@@ -22,9 +25,33 @@ class DB
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ];
             self::$pdo = new PDO($dsn, $c['user'], $c['pass'], $opt);
-            self::ensureSchema();
+            if (!self::schemaUpToDate()) {
+                self::ensureSchema();
+                self::setSchemaVersion();
+            }
         }
         return self::$pdo;
+    }
+
+    /** 判断 schema 是否已是最新（无该标记或版本落后则需迁移） */
+    private static function schemaUpToDate()
+    {
+        try {
+            $v = self::$pdo->query("SELECT v FROM settings WHERE k='schema_version'")->fetchColumn();
+            return (string)$v === self::SCHEMA_VERSION;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    /** 写入当前 schema 版本标记 */
+    private static function setSchemaVersion()
+    {
+        try {
+            self::$pdo->exec("INSERT INTO settings(k,v) VALUES('schema_version'," . self::$pdo->quote(self::SCHEMA_VERSION) . ") ON DUPLICATE KEY UPDATE v=VALUES(v)");
+        } catch (Throwable $e) {
+            // 忽略
+        }
     }
 
     /** 覆盖部署后的自动迁移：补齐 apis.parse_type 字段与 parse_types 表及默认种子 */
@@ -91,7 +118,8 @@ class DB
                 ('epay_public_key',''),('epay_private_key',''),
                 ('alipay_enabled','0'),('alipay_app_id',''),('alipay_private_key',''),('alipay_public_key',''),
                 ('bark_enabled','0'),('bark_server','https://api.day.app'),('bark_key',''),('bark_notify_register','0'),('bark_notify_recharge','0'),('bark_sound',''),
-                ('share_title',''),('share_desc',''),('share_image','')");
+                ('share_title',''),('share_desc',''),('share_image',''),
+                ('wxmp_enabled','0'),('wxmp_appid',''),('wxmp_secret',''),('wxmp_token',''),('wxmp_checkin_points','1')");
             self::$pdo->exec("UPDATE `settings` SET `v`=" . self::$pdo->quote($ver) . " WHERE `k`='site_version' AND (`v`='' OR `v` NOT LIKE 'v%')");
         } catch (Throwable $e) {
             // 忽略
@@ -112,6 +140,88 @@ class DB
             $idx = self::$pdo->query("SHOW INDEX FROM `users` WHERE Key_name='uk_email'")->fetchAll();
             if (!$idx) {
                 self::$pdo->exec('ALTER TABLE `users` ADD UNIQUE KEY `uk_email` (`email`)');
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `users` LIKE 'wx_openid'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `users` ADD COLUMN `wx_openid` VARCHAR(64) NULL COMMENT '微信公众号 OpenID'");
+            }
+            $idx = self::$pdo->query("SHOW INDEX FROM `users` WHERE Key_name='uk_wx_openid'")->fetchAll();
+            if (!$idx) {
+                self::$pdo->exec('ALTER TABLE `users` ADD UNIQUE KEY `uk_wx_openid` (`wx_openid`)');
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $tables = self::$pdo->query("SHOW TABLES LIKE 'wx_bind_codes'")->fetchAll();
+            if (!$tables) {
+                self::$pdo->exec("CREATE TABLE `wx_bind_codes` (
+                    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `user_id` INT UNSIGNED NOT NULL,
+                    `code` VARCHAR(8) NOT NULL COMMENT '绑定码',
+                    `expires_at` DATETIME NOT NULL,
+                    `used_at` DATETIME NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uk_code` (`code`),
+                    KEY `idx_user` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信绑定码'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $tables = self::$pdo->query("SHOW TABLES LIKE 'wx_checkins'")->fetchAll();
+            if (!$tables) {
+                self::$pdo->exec("CREATE TABLE `wx_checkins` (
+                    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `user_id` INT UNSIGNED NOT NULL,
+                    `openid` VARCHAR(64) NOT NULL,
+                    `points` INT NOT NULL DEFAULT 0,
+                    `checkin_date` DATE NOT NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uk_user_date` (`user_id`, `checkin_date`),
+                    KEY `idx_openid` (`openid`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信公众号签到记录'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            self::$pdo->exec("INSERT IGNORE INTO `settings` (`k`,`v`) VALUES
+                ('wxmp_enabled','0'),('wxmp_appid',''),('wxmp_secret',''),('wxmp_token',''),('wxmp_checkin_points','1'),
+                ('invite_reward_register','0'),('invite_reward_recharge','0')");
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `parse_logs` LIKE 'api_id'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `parse_logs`
+                    ADD COLUMN `api_id` INT UNSIGNED NULL COMMENT '使用的接口ID(0=内置解析器)',
+                    ADD COLUMN `success` TINYINT NOT NULL DEFAULT 1 COMMENT '1成功 0失败',
+                    ADD COLUMN `duration_ms` INT NOT NULL DEFAULT 0 COMMENT '解析耗时(毫秒)'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `users` LIKE 'inviter_id'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `users` ADD COLUMN `inviter_id` INT UNSIGNED NULL COMMENT '邀请人用户ID'");
+            }
+        } catch (Throwable $e) {
+            // 忽略
+        }
+        try {
+            $cols = self::$pdo->query("SHOW COLUMNS FROM `users` LIKE 'invite_rewarded'")->fetchAll();
+            if (!$cols) {
+                self::$pdo->exec("ALTER TABLE `users` ADD COLUMN `invite_rewarded` TINYINT NOT NULL DEFAULT 0 COMMENT '首充邀请奖励是否已发放(0未 1已)'");
             }
         } catch (Throwable $e) {
             // 忽略

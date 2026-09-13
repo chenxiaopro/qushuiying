@@ -4,7 +4,7 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var toastTimer = null;
-  var state = { page: 1 };
+  var pages = { users: 1, orders: 1, logs: 1, cards: 1, apis: 1 };
 
   function toast(msg) {
     var t = $('toast');
@@ -80,6 +80,7 @@
       p.classList.toggle('hide', p.getAttribute('data-name') !== name);
     });
     if (name === 'dashboard') loadStats();
+    if (name === 'userMap') loadUserMap();
     if (name === 'users') loadUsers(1);
     if (name === 'orders') loadOrders(1, $('orderStatus').value);
     if (name === 'logs') loadLogs(1);
@@ -101,9 +102,15 @@
         ['有效订单', d.orders],
         ['总营收(元)', d.income.toFixed(2)],
         ['解析次数', d.parses],
+        ['解析成功', d.parses_ok || 0],
+        ['解析失败', d.parses_fail || 0],
         ['今日解析', d.parses_today],
+        ['今日成功', d.parses_today_ok || 0],
+        ['平均耗时(ms)', d.parse_avg_ms || 0],
         ['累计充值点数', d.points_total],
         ['未用卡密', d.cards_unused],
+        ['已绑微信', d.wx_bound || 0],
+        ['今日签到', d.wx_checkins_today || 0],
       ];
       $('statsGrid').innerHTML = items.map(function (x) {
         return '<div class="stat"><b>' + esc(x[1]) + '</b><span>' + esc(x[0]) + '</span></div>';
@@ -113,12 +120,14 @@
         $('recentParses').innerHTML = '<p style="color:#8a90a3">暂无解析记录</p>';
       } else {
         $('recentParses').innerHTML =
-          '<div class="table-wrap"><table><thead><tr><th>用户</th><th>平台</th><th>标题</th><th>消耗</th><th>时间</th></tr></thead><tbody>' +
+          '<div class="table-wrap"><table><thead><tr><th>用户</th><th>平台</th><th>标题</th><th>结果</th><th>耗时</th><th>消耗</th><th>时间</th></tr></thead><tbody>' +
           recent.map(function (p) {
             return '<tr>' +
               '<td>' + esc(p.username || '-') + '</td>' +
               '<td>' + esc(p.platform || '-') + '</td>' +
               '<td>' + esc(p.title || '-') + '</td>' +
+              '<td>' + logResult(p) + '</td>' +
+              '<td>' + logDuration(p) + '</td>' +
               '<td>' + p.cost + '</td>' +
               '<td>' + esc(p.created_at) + '</td>' +
               '</tr>';
@@ -127,31 +136,175 @@
     });
   }
 
+  /* ---------- 用户分布地图 ---------- */
+  var userMapReady = false;
+  var userMapChart = null;
+
+  function loadUserMap() {
+    var el = $('userMap');
+    if (!el) return;
+    adminApi('user_geo').then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { showMapHint('地图数据加载失败'); return; }
+      var d = res.data || {};
+      renderGeoStats(d);
+      renderGeoRank(d);
+      if (!d.total) {
+        el.innerHTML = '<div class="user-map-empty">暂无用户数据</div>';
+        return;
+      }
+      if (userMapReady) { if (userMapChart) userMapChart.resize(); return; }
+      userMapReady = true;
+      loadChinaMap().then(function (echarts) {
+        renderChinaMap(echarts, el, d);
+      }).catch(function () {
+        userMapReady = false;
+        el.innerHTML = '<div class="user-map-empty">地图资源加载失败</div>';
+      });
+    });
+  }
+
+  function renderGeoStats(d) {
+    var el = $('userGeoStats');
+    if (!el) return;
+    var prov = d.provinces || [];
+    var items = [
+      ['总用户', d.total || 0],
+      ['已定位', d.located || 0],
+      ['未定位', d.unknown || 0],
+      ['覆盖省份', prov.length]
+    ];
+    el.innerHTML = items.map(function (x) {
+      return '<div class="stat"><b>' + esc(x[1]) + '</b><span>' + esc(x[0]) + '</span></div>';
+    }).join('');
+  }
+
+  function renderGeoRank(d) {
+    var el = $('userMapRank');
+    if (!el) return;
+    var prov = (d.provinces || []).slice().sort(function (a, b) { return b.value - a.value; });
+    if (!prov.length) {
+      el.innerHTML = '<div class="user-map-empty">暂无定位数据</div>';
+      return;
+    }
+    var max = prov[0].value || 1;
+    el.innerHTML = prov.map(function (x) {
+      var pct = Math.round(x.value / max * 100);
+      return '<div class="rank-item">' +
+        '<span class="rank-name">' + esc(x.name) + '</span>' +
+        '<span class="rank-bar"><i style="width:' + pct + '%"></i></span>' +
+        '<span class="rank-val">' + x.value + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function showMapHint(msg) {
+    var h = $('userMapHint');
+    if (h) h.textContent = msg ? '（' + msg + '）' : '';
+  }
+
+  function loadChinaMap() {
+    return new Promise(function (resolve, reject) {
+      var go = function (echarts) {
+        fetch('../assets/vendor/china.json')
+          .then(function (r) { return r.json(); })
+          .then(function (geo) {
+            normalizeGeo(geo);
+            echarts.registerMap('china', geo);
+            resolve(echarts);
+          })
+          .catch(reject);
+      };
+      if (window.echarts) { go(window.echarts); return; }
+      var s = document.createElement('script');
+      s.src = '../assets/vendor/echarts.min.js';
+      s.onload = function () { window.echarts ? go(window.echarts) : reject(new Error('echarts')); };
+      s.onerror = function () { reject(new Error('echarts')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function normalizeProvinceName(n) {
+    n = String(n == null ? '' : n).trim();
+    var alias = {
+      '内蒙古自治区': '内蒙古', '广西壮族自治区': '广西', '西藏自治区': '西藏',
+      '宁夏回族自治区': '宁夏', '新疆维吾尔自治区': '新疆',
+      '香港特别行政区': '香港', '澳门特别行政区': '澳门'
+    };
+    if (alias[n]) return alias[n];
+    return n.replace(/(省|市)$/, '');
+  }
+
+  function normalizeGeo(geo) {
+    (geo.features || []).forEach(function (f) {
+      if (f.properties && f.properties.name) {
+        f.properties.name = normalizeProvinceName(f.properties.name);
+      }
+    });
+  }
+
+  function renderChinaMap(echarts, el, d) {
+    var data = d.provinces || [];
+    var max = 1;
+    data.forEach(function (x) { if (x.value > max) max = x.value; });
+    userMapChart = echarts.init(el);
+    userMapChart.setOption({
+      tooltip: {
+        trigger: 'item',
+        formatter: function (p) {
+          var v = (p.value == null || isNaN(p.value)) ? 0 : p.value;
+          return p.name + '：' + v + ' 位用户';
+        }
+      },
+      visualMap: {
+        min: 0, max: max, left: 16, bottom: 16,
+        text: ['多', '少'], calculable: true,
+        inRange: { color: ['#eef4ff', '#7aa9e6', '#2c5fa8', '#123a75'] },
+        textStyle: { color: '#8a90a3' }
+      },
+      series: [{
+        type: 'map', map: 'china', roam: false, zoom: 1.15,
+        label: { show: false },
+        itemStyle: { borderColor: '#ffffff', borderWidth: 0.5, areaColor: '#f2f4f8' },
+        emphasis: { label: { show: true, color: '#1a1f2e' }, itemStyle: { areaColor: '#ffd166' } },
+        data: data
+      }]
+    });
+    if (d.service_ok === false) showMapHint('定位服务暂不可用，仅显示已缓存数据');
+    window.addEventListener('resize', function () { if (userMapChart) userMapChart.resize(); });
+  }
+
   /* ---------- 用户管理 ---------- */
   function loadUsers(page, q) {
-    state.page = page || 1;
-    adminApi('users', { page: state.page, q: q || $('userSearch').value.trim() })
+    pages.users = page || 1;
+    adminApi('users', { page: pages.users, q: q || $('userSearch').value.trim() })
       .then(function (res) {
         if (!checkAuth(res)) return;
         var d = res.data;
         if (!d.list.length) { $('usersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
         else {
           $('usersTable').innerHTML =
-            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>微信</th><th>余额</th><th>累计充值</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>IP地址</th><th>地址</th><th>邀请人</th><th>操作</th></tr></thead><tbody>' +
             d.list.map(function (u) {
               return '<tr>' +
                 '<td>' + u.id + '</td>' +
                 '<td>' + esc(u.username) + '</td>' +
                 '<td>' + esc(u.email || '未绑定') + '</td>' +
+                '<td>' + (u.wx_bound ? '已绑定' : '未绑定') + '</td>' +
                 '<td><b>' + u.points + '</b></td>' +
                 '<td>' + u.total_points + '</td>' +
                 '<td>' + (u.status == 1 ? '<span class="badge-ok">正常</span>' : '<span class="badge-off">禁用</span>') + '</td>' +
                 '<td>' + esc(u.created_at) + '</td>' +
                 '<td>' + esc(u.last_login_at || '-') + '</td>' +
+                '<td>' + esc(u.last_login_ip || '-') + '</td>' +
+                '<td>' + esc(u.location || '-') + '</td>' +
+                '<td>' + (u.inviter_name ? esc(u.inviter_name) + (u.invited_count ? '（邀' + u.invited_count + '人）' : '') : '-') + '</td>' +
                 '<td>' +
                   '<button class="btn btn-sm" data-user-action="add" data-id="' + u.id + '">加点</button> ' +
                   '<button class="btn btn-sm" data-user-action="deduct" data-id="' + u.id + '">扣点</button> ' +
                   '<button class="btn btn-sm" data-user-action="toggle" data-id="' + u.id + '">' + (u.status == 1 ? '禁用' : '启用') + '</button> ' +
+                  '<button class="btn btn-sm" data-user-action="email" data-id="' + u.id + '" data-email="' + esc(u.email || '') + '">改邮箱</button> ' +
+                  (u.wx_bound ? '<button class="btn btn-sm" data-user-action="unbindwx" data-id="' + u.id + '">解绑微信</button> ' : '') +
                   '<button class="btn btn-sm" data-user-action="reset" data-id="' + u.id + '">重置密码</button>' +
                 '</td></tr>';
             }).join('') + '</tbody></table></div>';
@@ -171,22 +324,34 @@
         if (act === 'toggle') {
           adminApi('user_action', { id: id, sub: 'toggle' }).then(function (res) {
             if (!checkAuth(res)) return;
-            toast('已更新'); loadUsers(state.page);
+            toast('已更新'); loadUsers(pages.users);
           });
         } else if (act === 'add' || act === 'deduct') {
           openUserModal(id, act === 'add' ? '增加点数' : '扣除点数', 'points');
         } else if (act === 'reset') {
           openUserModal(id, '重置密码', 'password');
+        } else if (act === 'email') {
+          openUserModal(id, '修改邮箱', 'email', b.getAttribute('data-email') || '');
+        } else if (act === 'unbindwx') {
+          adminApi('user_action', { id: id, sub: 'unbind_wx' }).then(function (res) {
+            if (!checkAuth(res)) return;
+            if (res.code !== 0) { toast(res.msg); return; }
+            toast('已解绑微信'); loadUsers(pages.users);
+          });
         }
       });
     });
   }
 
-  function openUserModal(id, title, type) {
+  function openUserModal(id, title, type, extra) {
     $('userModalTitle').textContent = title;
     if (type === 'points') {
       $('userModalBody').innerHTML =
         '<label>点数</label><input class="field" id="userModalVal" type="number" min="1">' +
+        '<button class="btn btn-primary btn-block" style="margin-top:16px" id="userModalOk">确定</button>';
+    } else if (type === 'email') {
+      $('userModalBody').innerHTML =
+        '<label>邮箱（留空则解绑）</label><input class="field" id="userModalVal" type="email" maxlength="64" value="' + esc(extra || '') + '">' +
         '<button class="btn btn-primary btn-block" style="margin-top:16px" id="userModalOk">确定</button>';
     } else {
       $('userModalBody').innerHTML =
@@ -196,14 +361,16 @@
     $('userModal').classList.remove('hide');
     $('userModalOk').addEventListener('click', function () {
       var val = $('userModalVal').value.trim();
-      if (!val) { toast('请输入数值'); return; }
-      var action = type === 'points' ? (title.indexOf('增加') >= 0 ? 'add_points' : 'deduct_points') : 'reset_pwd';
-      adminApi('user_action', { id: id, sub: action, points: val, password: val }).then(function (res) {
+      if (type !== 'email' && !val) { toast('请输入数值'); return; }
+      var action = 'reset_pwd';
+      if (type === 'points') action = title.indexOf('增加') >= 0 ? 'add_points' : 'deduct_points';
+      if (type === 'email') action = 'set_email';
+      adminApi('user_action', { id: id, sub: action, points: val, password: val, email: val }).then(function (res) {
         if (!checkAuth(res)) return;
         if (res.code !== 0) { toast(res.msg); return; }
         $('userModal').classList.add('hide');
         toast('操作成功');
-        loadUsers(state.page);
+        loadUsers(pages.users);
       });
     });
   }
@@ -211,8 +378,8 @@
 
   /* ---------- 订单 ---------- */
   function loadOrders(page, status) {
-    state.page = page || 1;
-    adminApi('orders', { page: state.page, status: status || '' }).then(function (res) {
+    pages.orders = page || 1;
+    adminApi('orders', { page: pages.orders, status: status || '' }).then(function (res) {
       if (!checkAuth(res)) return;
       var d = res.data;
       if (!d.list.length) { $('ordersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
@@ -238,22 +405,34 @@
   }
   $('orderFilterBtn').addEventListener('click', function () { loadOrders(1, $('orderStatus').value); });
 
+  function logResult(p) {
+    return String(p.success) === '0'
+      ? '<span class="badge-off">失败</span>'
+      : '<span class="badge-ok">成功</span>';
+  }
+  function logDuration(p) {
+    var ms = parseInt(p.duration_ms, 10);
+    return ms > 0 ? (ms + ' ms') : '<span class="muted">-</span>';
+  }
+
   /* ---------- 解析记录 ---------- */
-  function loadLogs(page) {
-    state.page = page || 1;
-    adminApi('logs', { page: state.page }).then(function (res) {
+  function loadLogs(page, q) {
+    pages.logs = page || 1;
+    adminApi('logs', { page: pages.logs, q: q || $('logSearch').value.trim() }).then(function (res) {
       if (!checkAuth(res)) return;
       var d = res.data;
       if (!d.list.length) { $('logsTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
       else {
         $('logsTable').innerHTML =
-          '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户</th><th>平台</th><th>内容</th><th>消耗</th><th>IP</th><th>时间</th></tr></thead><tbody>' +
+          '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户</th><th>平台</th><th>内容</th><th>结果</th><th>耗时</th><th>消耗</th><th>IP</th><th>时间</th></tr></thead><tbody>' +
           d.list.map(function (p) {
             return '<tr>' +
               '<td>' + p.id + '</td>' +
               '<td>' + esc(p.username || '-') + '</td>' +
               '<td>' + esc(p.platform || '-') + '</td>' +
               '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(p.text) + '">' + esc(p.text) + '</td>' +
+              '<td>' + logResult(p) + '</td>' +
+              '<td>' + logDuration(p) + '</td>' +
               '<td>' + p.cost + '</td>' +
               '<td>' + esc(p.ip || '-') + '</td>' +
               '<td>' + esc(p.created_at) + '</td></tr>';
@@ -262,11 +441,13 @@
       $('logsPager').innerHTML = pager(d.page, d.pages, function (p) { loadLogs(p); });
     });
   }
+  $('logSearchBtn').addEventListener('click', function () { loadLogs(1); });
+  $('logSearch').addEventListener('keydown', function (e) { if (e.key === 'Enter') loadLogs(1); });
 
   /* ---------- 卡密 ---------- */
   function loadCards(page) {
-    state.page = page || 1;
-    adminApi('cards', { page: state.page }).then(function (res) {
+    pages.cards = page || 1;
+    adminApi('cards', { page: pages.cards }).then(function (res) {
       if (!checkAuth(res)) return;
       var d = res.data;
       if (!d.list.length) { $('cardsTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
@@ -380,19 +561,27 @@
       $('set_epay_api').value = d.epay_api;
       $('set_epay_pid').value = d.epay_pid;
       $('set_epay_public_key').value = d.epay_public_key;
-      $('set_epay_private_key').value = d.epay_private_key;
+      fillSecret('set_epay_private_key', d.epay_private_key);
       $('set_alipay_enabled').value = d.alipay_enabled;
       $('set_alipay_app_id').value = d.alipay_app_id;
-      $('set_alipay_private_key').value = d.alipay_private_key;
+      fillSecret('set_alipay_private_key', d.alipay_private_key);
       $('set_alipay_public_key').value = d.alipay_public_key;
       $('set_wechat_enabled').value = d.wechat_enabled;
       $('set_wechat_name').value = d.wechat_name;
       $('set_wechat_qrcode').value = d.wechat_qrcode;
       $('set_wechat_desc').value = d.wechat_desc;
+      $('set_wxmp_enabled').value = d.wxmp_enabled;
+      $('set_wxmp_appid').value = d.wxmp_appid;
+      fillSecret('set_wxmp_secret', d.wxmp_secret);
+      $('set_wxmp_token').value = d.wxmp_token;
+      $('set_wxmp_checkin_points').value = d.wxmp_checkin_points || '1';
+      $('set_invite_reward_register').value = d.invite_reward_register || '0';
+      $('set_invite_reward_recharge').value = d.invite_reward_recharge || '0';
+      if ($('wxmpCallbackUrl')) $('wxmpCallbackUrl').textContent = d.wxmp_callback || '—';
       $('set_site_version').textContent = d.site_version || '—';
       $('set_bark_enabled').value = d.bark_enabled;
       $('set_bark_server').value = d.bark_server;
-      $('set_bark_key').value = d.bark_key;
+      fillSecret('set_bark_key', d.bark_key);
       $('set_bark_sound').value = d.bark_sound;
       $('set_bark_notify_register').value = d.bark_notify_register;
       $('set_bark_notify_recharge').value = d.bark_notify_recharge;
@@ -406,6 +595,13 @@
     var p = {};
     keys.forEach(function (k) { p[k] = $('set_' + k).value.trim(); });
     return p;
+  }
+
+  function fillSecret(id, val) {
+    var el = $(id);
+    if (!el) return;
+    el.value = '';
+    el.placeholder = (val === '__SET__') ? '已配置，留空则不修改' : '';
   }
   $('saveSettingsBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
@@ -425,6 +621,57 @@
       toast('公众号设置已保存');
     });
   });
+  $('saveWxmpBtn').addEventListener('click', function () {
+    adminApi('save_settings', collectSettings(
+      ['wxmp_enabled', 'wxmp_appid', 'wxmp_secret', 'wxmp_token', 'wxmp_checkin_points']
+    )).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast('签到配置已保存');
+    });
+  });
+  $('saveInviteBtn').addEventListener('click', function () {
+    adminApi('save_settings', collectSettings(
+      ['invite_reward_register', 'invite_reward_recharge']
+    )).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast('邀请设置已保存');
+    });
+  });
+  $('wxmpMenuBtn').addEventListener('click', function () {
+    adminApi('wxmp_menu', {}).then(function (res) {
+      if (!checkAuth(res)) return;
+      if (res.code !== 0) { toast(res.msg); return; }
+      toast((res.data && res.data.msg) || '菜单已创建');
+    });
+  });
+  if ($('wxmpCopyUrlBtn')) {
+    $('wxmpCopyUrlBtn').addEventListener('click', function () {
+      var url = ($('wxmpCallbackUrl') && $('wxmpCallbackUrl').textContent || '').trim();
+      if (!url || url === '—') { toast('回调地址尚未生成'); return; }
+      var done = function () { toast('已复制回调地址'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(function () { copyFallback(url, done); });
+      } else {
+        copyFallback(url, done);
+      }
+    });
+  }
+  if ($('wxmpCheckBtn')) {
+    $('wxmpCheckBtn').addEventListener('click', function () {
+      adminApi('wxmp_check', {}).then(function (res) {
+        if (!checkAuth(res)) return;
+        var box = $('wxmpCheckResult');
+        box.classList.remove('hide');
+        if (res.code !== 0) {
+          box.innerHTML = '<span style="color:#e5484d">检测失败：' + esc(res.msg) + '</span>';
+          return;
+        }
+        box.innerHTML = '<span style="color:#12a150">' + esc((res.data && res.data.message) || '配置有效') + '</span>';
+      });
+    });
+  }
   $('saveShareBtn').addEventListener('click', function () {
     adminApi('save_settings', collectSettings(
       ['share_title', 'share_desc', 'share_image']
@@ -734,9 +981,16 @@
   $('verModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
 
   /* ---------- 接口管理 ---------- */
+  function apiSuccessRate(a) {
+    if (!a.total_calls) return '<span class="muted">-</span>';
+    var p = Math.round(a.success_calls / a.total_calls * 100);
+    var cls = p >= 90 ? 'rate-ok' : (p >= 60 ? 'rate-warn' : 'rate-bad');
+    return '<span class="' + cls + '">' + p + '%</span>';
+  }
+
   function loadApis(page, q) {
-    state.page = page || 1;
-    adminApi('apis', { page: state.page, q: q || $('apiSearch').value.trim() })
+    pages.apis = page || 1;
+    adminApi('apis', { page: pages.apis, q: q || $('apiSearch').value.trim() })
       .then(function (res) {
         if (!checkAuth(res)) return;
         var d = res.data;
@@ -744,17 +998,20 @@
         else {
           d.list.forEach(function (a) { apiDataCache[a.id] = a; });
           $('apisTable').innerHTML =
-            '<div class="table-wrap"><table><thead><tr><th>接口ID</th><th>接口名称</th><th>接口图片</th><th>接口标识</th><th>解析类型</th><th>接口状态</th><th>操作</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table><thead><tr><th>接口ID</th><th>接口名称</th><th>接口图片</th><th>接口标识</th><th>解析类型</th><th>成功率</th><th>平均耗时</th><th>接口状态</th><th>操作</th></tr></thead><tbody>' +
             d.list.map(function (a) {
               var icon = a.icon
                 ? '<img class="api-icon" src="' + esc(a.icon) + '" alt="">'
                 : '<span class="api-icon"></span>';
+              var rate = apiSuccessRate(a);
               return '<tr>' +
                 '<td>' + a.id + '</td>' +
                 '<td>' + esc(a.name) + '</td>' +
                 '<td>' + icon + '</td>' +
                 '<td><code>' + esc(a.slug) + '</code></td>' +
                 '<td>' + (parseTypeName(a.parse_type)) + '</td>' +
+                '<td>' + rate + '</td>' +
+                '<td>' + (a.total_calls ? (a.avg_ms + ' ms') : '<span class="muted">-</span>') + '</td>' +
                 '<td><label class="switch"><input type="checkbox" data-api-toggle="' + a.id + '"' + (a.enabled == 1 ? ' checked' : '') + '><span class="slider"></span></label></td>' +
                 '<td>' +
                   '<button class="btn btn-sm" data-api-edit="' + a.id + '">编辑</button> ' +
@@ -786,7 +1043,7 @@
         adminApi('api_delete', { id: b.getAttribute('data-api-del') }).then(function (res) {
           if (!checkAuth(res)) return;
           toast('已删除');
-          loadApis(state.page);
+          loadApis(pages.apis);
         });
       });
     });
@@ -852,13 +1109,6 @@
   });
 
   $('apiModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
-
-  // 预加载接口数据用于编辑回填
-  adminApi('apis', { page: 1 }).then(function (res) {
-    if (res.code === 0) {
-      (res.data.list || []).forEach(function (a) { apiDataCache[a.id] = a; });
-    }
-  });
 
   /* ---------- 分页 ---------- */
   function pager(page, pages, cb) {

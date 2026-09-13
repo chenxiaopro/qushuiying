@@ -14,15 +14,22 @@
  *   POST profile_password 修改密码
  *   GET  my_parses        本人解析记录
  *   GET  my_recharges     本人充值记录
+ *   POST wx_bind_code     生成微信绑定码
+ *   POST wx_unbind        解绑微信
  */
 
 require_once __DIR__ . '/../app/init.php';
 require_once __DIR__ . '/../app/ParserFactory.php';
 require_once __DIR__ . '/../app/payment/Epay.php';
 require_once __DIR__ . '/../app/payment/AlipayF2F.php';
+require_once __DIR__ . '/../app/WechatMp.php';
 
 try {
     $action = input('action', '');
+    $loginRequired = ['parse', 'pay_create', 'pay_query', 'recharge_card', 'profile_email', 'profile_password', 'my_parses', 'my_recharges', 'wx_bind_code', 'wx_unbind'];
+    if (in_array($action, $loginRequired, true) && !current_user()) {
+        fail('请先登录', 401);
+    }
     $csrfSkip = ['me', 'parse_types', 'my_parses', 'my_recharges'];
     $needCsrf = !in_array($action, $csrfSkip, true)
         && $_SERVER['REQUEST_METHOD'] !== 'GET';
@@ -72,6 +79,12 @@ try {
         case 'my_recharges':
             api_my_recharges();
             break;
+        case 'wx_bind_code':
+            api_wx_bind_code();
+            break;
+        case 'wx_unbind':
+            api_wx_unbind();
+            break;
         default:
             fail('未知操作', 404);
     }
@@ -95,10 +108,17 @@ function api_register()
         fail('用户名已存在');
     }
 
+    $inviterId = (int)input('invite', 0);
+    if ($inviterId > 0 && !DB::one('SELECT id FROM users WHERE id=? AND status=1', [$inviterId])) {
+        $inviterId = 0;
+    }
+
     $registerPoints = max(0, (int)setting('register_points', 0));
-    DB::execute('INSERT INTO users(username,password,points,total_points,status) VALUES(?,?,?,?,1)', [
+    DB::execute('INSERT INTO users(username,password,points,total_points,status,inviter_id) VALUES(?,?,?,?,1,?)', [
         $username, password_hash($password, PASSWORD_DEFAULT), $registerPoints, $registerPoints,
+        $inviterId > 0 ? $inviterId : null,
     ]);
+    reward_invite_register($inviterId);
     NotifyBark::register($username);
     ok(['username' => $username, 'register_points' => $registerPoints, 'msg' => '注册成功']);
 }
@@ -162,9 +182,31 @@ function api_me()
         $data['id'] = (int)$u['id'];
         $data['username'] = $u['username'];
         $data['email'] = (string)($u['email'] ?? '');
+        $data['wx_bound'] = trim((string)($u['wx_openid'] ?? '')) !== '';
+        $data['wxmp_enabled'] = WechatMp::enabled();
+        $data['wxmp_checkin_points'] = WechatMp::checkinPoints();
+        $data['wxmp_name'] = trim((string)setting('wechat_name', ''));
+        $today = WechatMp::todayCheckin((int)$u['id']);
+        $data['wx_checked_in'] = $today !== null;
+        $data['wx_checkin_points'] = $today ? (int)$today['points'] : 0;
+        $data['wx_bind_code'] = '';
+        $data['wx_bind_expires'] = '';
+        if (!$data['wx_bound'] && WechatMp::enabled()) {
+            try {
+                $codeRow = WechatMp::activeBindCode((int)$u['id']);
+                $data['wx_bind_code'] = (string)($codeRow['code'] ?? '');
+                $data['wx_bind_expires'] = (string)($codeRow['expires_at'] ?? '');
+            } catch (Throwable $e) {
+                $data['wx_bind_code'] = '';
+                $data['wx_bind_expires'] = '';
+            }
+        }
         $data['points'] = (int)$u['points'];
         $data['total_points'] = (int)($u['total_points'] ?? 0);
         $data['created_at'] = (string)($u['created_at'] ?? '');
+        $data['invite_count'] = (int)DB::scalar('SELECT COUNT(*) FROM users WHERE inviter_id=?', [(int)$u['id']]);
+        $data['invite_reward_register'] = (int)setting('invite_reward_register', 0);
+        $data['invite_reward_recharge'] = (int)setting('invite_reward_recharge', 0);
     } elseif ($u && (int)$u['status'] !== 1) {
         unset($_SESSION['user_id']);
     }
@@ -181,6 +223,10 @@ function api_parse()
 {
     $u = require_login();
     check_parse_rate_limit($u['id']);
+    rate_limit_ip('parse', 20, 60);
+    if (rate_limit_locked('parse_fail:' . client_ip(), 30, 600)) {
+        fail('解析请求过于频繁，请稍后再试', 429);
+    }
 
     $text = trim((string)input('text', ''));
     if (mb_strlen($text) > 5000) {
@@ -197,8 +243,9 @@ function api_parse()
     try {
         $result = ParserFactory::parse($text, $mode !== '' ? $mode : null);
     } catch (RuntimeException $e) {
-        DB::execute('INSERT INTO parse_logs(user_id,text,platform,cost,ip,created_at) VALUES(?,?,?,?,?,NOW())', [
-            $u['id'], $text, $platform, 0, client_ip(),
+        rate_limit_attempt('parse_fail:' . client_ip(), 30, 600);
+        DB::execute('INSERT INTO parse_logs(user_id,text,platform,api_id,success,duration_ms,cost,ip,created_at) VALUES(?,?,?,?,0,?,?,?,NOW())', [
+            $u['id'], $text, $platform, ParserFactory::lastApiId(), ParserFactory::lastDurationMs(), 0, client_ip(),
         ]);
         fail($e->getMessage(), 1);
     }
@@ -210,8 +257,9 @@ function api_parse()
             DB::pdo()->rollBack();
             fail('点数不足，请先充值', 402);
         }
-        DB::execute('INSERT INTO parse_logs(user_id,text,platform,title,cover,video_url,cost,ip,created_at) VALUES(?,?,?,?,?,?,?,?,NOW())', [
-            $u['id'], $text, $result['platform'], $result['title'] ?? '', $result['cover'] ?? '',
+        DB::execute('INSERT INTO parse_logs(user_id,text,platform,api_id,success,duration_ms,title,cover,video_url,cost,ip,created_at) VALUES(?,?,?,?,1,?,?,?,?,?,?,NOW())', [
+            $u['id'], $text, $result['platform'], ParserFactory::lastApiId(), ParserFactory::lastDurationMs(),
+            $result['title'] ?? '', $result['cover'] ?? '',
             $result['video_url'] ?? '', $cost, client_ip(),
         ]);
         DB::pdo()->commit();
@@ -227,6 +275,48 @@ function api_parse()
         $result['music'] = ['title' => '', 'author' => '', 'cover' => '', 'url' => $mu];
     }
     $left = (int)DB::scalar('SELECT points FROM users WHERE id=?', [$u['id']]);
+
+    // 为返回的直链生成下载签名令牌，防止 download.php 被当作免费代理滥用
+    $urls = [];
+    foreach (['video_url'] as $k) {
+        if (!empty($result[$k]) && is_string($result[$k])) {
+            $urls[] = $result[$k];
+        }
+    }
+    if (!empty($result['music']['url']) && is_string($result['music']['url'])) {
+        $urls[] = $result['music']['url'];
+    }
+    foreach (['images', 'video_backup', 'live'] as $k) {
+        if (is_array($result[$k] ?? null)) {
+            foreach ($result[$k] as $item) {
+                if (is_string($item) && $item !== '') {
+                    $urls[] = $item;
+                }
+            }
+        }
+    }
+    foreach (($result['list'] ?? []) as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        if (!empty($item['video_url']) && is_string($item['video_url'])) {
+            $urls[] = $item['video_url'];
+        }
+        if (is_array($item['images'] ?? null)) {
+            foreach ($item['images'] as $img) {
+                if (is_string($img) && $img !== '') {
+                    $urls[] = $img;
+                }
+            }
+        }
+    }
+    $tokens = [];
+    foreach (array_values(array_unique(array_filter($urls))) as $url) {
+        if (preg_match('#^https?://#i', $url)) {
+            $tokens[$url] = download_token($u['id'], $url);
+        }
+    }
+
     ok([
         'result' => [
             'platform'     => $result['platform'],
@@ -246,6 +336,7 @@ function api_parse()
         ],
         'cost'  => $cost,
         'points_left' => $left,
+        'tokens' => $tokens,
     ]);
 }
 
@@ -336,6 +427,7 @@ function api_recharge_card()
         }
         DB::execute('UPDATE cards SET status=1, used_by=?, used_at=NOW() WHERE id=?', [$u['id'], $card['id']]);
         add_points($u['id'], (int)$card['points']);
+        reward_invite_recharge((int)$u['id']);
         $left = (int)DB::scalar('SELECT points FROM users WHERE id=?', [$u['id']]);
         DB::pdo()->commit();
         ok(['points' => (int)$card['points'], 'points_left' => $left]);
@@ -401,49 +493,79 @@ function api_my_recharges()
     $u = require_login();
     $page = max(1, (int)input('page', 1));
     $pageSize = 10;
-    $orders = DB::all(
-        'SELECT order_sn AS title, amount, points, status, pay_type, created_at FROM orders WHERE user_id=?',
-        [$u['id']]
-    );
-    $cards = DB::all(
-        'SELECT card_no AS title, 0 AS amount, points, 1 AS status, used_at AS created_at FROM cards WHERE used_by=? AND status=1',
-        [$u['id']]
-    );
-    $list = [];
-    foreach ($orders as $row) {
-        $list[] = [
-            'kind'       => 'order',
-            'title'      => (string)$row['title'],
-            'amount'     => (string)$row['amount'],
-            'points'     => (int)$row['points'],
-            'status'     => (int)$row['status'],
-            'pay_type'   => (string)($row['pay_type'] ?? ''),
-            'created_at' => (string)$row['created_at'],
-        ];
-    }
-    foreach ($cards as $row) {
-        $no = (string)$row['title'];
-        $tail = mb_substr($no, -4);
-        $mask = str_repeat('*', max(0, mb_strlen($no) - 4)) . $tail;
-        $list[] = [
-            'kind'       => 'card',
-            'title'      => $mask,
-            'amount'     => '0.00',
-            'points'     => (int)$row['points'],
-            'status'     => 1,
-            'pay_type'   => 'card',
-            'created_at' => (string)($row['created_at'] ?? ''),
-        ];
-    }
-    usort($list, function ($a, $b) {
-        return strcmp($b['created_at'], $a['created_at']);
-    });
-    $total = count($list);
+    $uid = (int)$u['id'];
+
+    $total = (int)DB::scalar('SELECT COUNT(*) FROM orders WHERE user_id=?', [$uid])
+        + (int)DB::scalar('SELECT COUNT(*) FROM cards WHERE used_by=? AND status=1', [$uid]);
     $pages = max(1, (int)ceil($total / $pageSize));
     if ($page > $pages) {
         $page = $pages;
     }
-    $slice = array_slice($list, ($page - 1) * $pageSize, $pageSize);
-    ok(['list' => $slice, 'total' => $total, 'page' => $page, 'pages' => $pages]);
+    $offset = ($page - 1) * $pageSize;
+
+    $rows = DB::all(
+        "SELECT 'order' AS kind, order_sn AS title, amount, points, status, pay_type, created_at FROM orders WHERE user_id=?" .
+        " UNION ALL " .
+        "SELECT 'card' AS kind, card_no AS title, 0 AS amount, points, 1 AS status, 'card' AS pay_type, used_at AS created_at FROM cards WHERE used_by=? AND status=1" .
+        " ORDER BY created_at DESC LIMIT " . $offset . ',' . $pageSize,
+        [$uid, $uid]
+    );
+
+    $list = [];
+    foreach ($rows as $row) {
+        if ((string)$row['kind'] === 'card') {
+            $no = (string)$row['title'];
+            $tail = mb_substr($no, -4);
+            $mask = str_repeat('*', max(0, mb_strlen($no) - 4)) . $tail;
+            $list[] = [
+                'kind'       => 'card',
+                'title'      => $mask,
+                'amount'     => '0.00',
+                'points'     => (int)$row['points'],
+                'status'     => 1,
+                'pay_type'   => 'card',
+                'created_at' => (string)($row['created_at'] ?? ''),
+            ];
+        } else {
+            $list[] = [
+                'kind'       => 'order',
+                'title'      => (string)$row['title'],
+                'amount'     => (string)$row['amount'],
+                'points'     => (int)$row['points'],
+                'status'     => (int)$row['status'],
+                'pay_type'   => (string)($row['pay_type'] ?? ''),
+                'created_at' => (string)$row['created_at'],
+            ];
+        }
+    }
+    ok(['list' => $list, 'total' => $total, 'page' => $page, 'pages' => $pages]);
+}
+
+function api_wx_bind_code()
+{
+    $u = require_login();
+    if (trim((string)($u['wx_openid'] ?? '')) !== '') {
+        fail('已绑定微信，如需换绑请先解绑');
+    }
+    if (!WechatMp::enabled()) {
+        fail('公众号签到未开启');
+    }
+    $row = WechatMp::issueBindCode((int)$u['id']);
+    ok([
+        'code'       => $row['code'],
+        'expires_at' => $row['expires_at'],
+        'wx_name'    => trim((string)setting('wechat_name', '')),
+    ]);
+}
+
+function api_wx_unbind()
+{
+    $u = require_login();
+    if (trim((string)($u['wx_openid'] ?? '')) === '') {
+        fail('尚未绑定微信');
+    }
+    DB::execute('UPDATE users SET wx_openid=NULL WHERE id=?', [(int)$u['id']]);
+    DB::execute('DELETE FROM wx_bind_codes WHERE user_id=?', [(int)$u['id']]);
+    ok(['wx_bound' => false]);
 }
 

@@ -6,7 +6,7 @@
  *   POST logout             退出
  *   GET  stats              仪表盘统计
  *   GET  users?page=&q=     用户列表
- *   POST user_action        用户操作(加点/扣点/禁用/重置密码)
+ *   POST user_action        用户操作(加点/扣点/禁用/重置密码/改邮箱)
  *   GET  orders?page=&status= 订单列表
  *   GET  logs?page=&q=      解析记录
  *   GET  cards?page=        卡密列表
@@ -17,10 +17,15 @@
 
 require_once __DIR__ . '/../../app/init.php';
 require_once __DIR__ . '/../../app/payment/Epay.php';
+require_once __DIR__ . '/../../app/WechatMp.php';
+require_once __DIR__ . '/../../app/GeoIp.php';
 
 try {
     $action = input('action', '');
     if ($action !== 'login' && $action !== '' && $_SERVER['REQUEST_METHOD'] !== 'GET') {
+        if (!current_admin()) {
+            fail('请先登录', 401);
+        }
         if ($action !== 'logout') {
             csrf_check();
         }
@@ -77,6 +82,14 @@ try {
             require_admin();
             ok(Epay::selfCheck());
             break;
+        case 'wxmp_menu':
+            require_admin();
+            admin_wxmp_menu();
+            break;
+        case 'wxmp_check':
+            require_admin();
+            admin_wxmp_check();
+            break;
         case 'apis':
             require_admin();
             admin_apis();
@@ -121,6 +134,10 @@ try {
             require_admin();
             admin_version_delete();
             break;
+        case 'user_geo':
+            require_admin();
+            admin_user_geo();
+            break;
         case 'me':
             $a = current_admin();
             if (!$a) {
@@ -140,10 +157,19 @@ function admin_login()
     rate_limit_ip('admin_login', 8, 300);
     $username = trim(input('username', ''));
     $password = (string)input('password', '');
+    $failKey = 'admin_fail:' . strtolower($username);
+
+    // 账号级失败锁定：5 分钟 5 次，与 IP 无关，防定向暴力破解
+    if (rate_limit_locked($failKey, 5, 300)) {
+        fail('尝试次数过多，请 5 分钟后重试', 429);
+    }
+
     $a = DB::one('SELECT * FROM admins WHERE username=?', [$username]);
     if (!$a || !password_verify($password, $a['password'])) {
+        rate_limit_attempt($failKey, 5, 300);
         fail('用户名或密码错误');
     }
+    rate_limit_reset($failKey);
     session_regenerate_id(true);
     $_SESSION['admin_id'] = (int)$a['id'];
     ok(['username' => $a['username'], 'csrf' => csrf_token()]);
@@ -152,16 +178,26 @@ function admin_login()
 function admin_stats()
 {
     $today = date('Y-m-d');
-    $recent = DB::all('SELECT p.id, u.username, p.platform, p.title, p.cost, p.created_at FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.id DESC LIMIT 8');
+    $parseOk = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE success=1');
+    $parseFail = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE success=0');
+    $parseTodayOk = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE success=1 AND DATE(created_at)=?', [$today]);
+    $avgMs = (int)round((float)DB::scalar('SELECT IFNULL(AVG(duration_ms),0) FROM parse_logs WHERE duration_ms>0'));
+    $recent = DB::all('SELECT p.id, u.username, p.platform, p.title, p.cost, p.success, p.duration_ms, p.created_at FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.id DESC LIMIT 8');
     ok([
         'users'       => (int)DB::scalar('SELECT COUNT(*) FROM users'),
         'users_today' => (int)DB::scalar('SELECT COUNT(*) FROM users WHERE DATE(created_at)=?', [$today]),
         'orders'      => (int)DB::scalar('SELECT COUNT(*) FROM orders WHERE status=1'),
         'income'      => (float)DB::scalar('SELECT IFNULL(SUM(amount),0) FROM orders WHERE status=1'),
-        'parses'      => (int)DB::scalar('SELECT COUNT(*) FROM parse_logs'),
+        'parses'      => $parseOk + $parseFail,
+        'parses_ok'   => $parseOk,
+        'parses_fail' => $parseFail,
         'parses_today'=> (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE DATE(created_at)=?', [$today]),
+        'parses_today_ok' => $parseTodayOk,
+        'parse_avg_ms'=> $avgMs,
         'points_total'=> (int)DB::scalar('SELECT IFNULL(SUM(total_points),0) FROM users'),
         'cards_unused'=> (int)DB::scalar('SELECT COUNT(*) FROM cards WHERE status=0'),
+        'wx_bound'    => (int)DB::scalar("SELECT COUNT(*) FROM users WHERE wx_openid IS NOT NULL AND wx_openid<>''"),
+        'wx_checkins_today' => (int)DB::scalar('SELECT COUNT(*) FROM wx_checkins WHERE checkin_date=?', [$today]),
         'recent_parses' => $recent,
     ]);
 }
@@ -181,10 +217,60 @@ function admin_users()
     $pages = max(1, ceil($total / $pageSize));
     $offset = ($page - 1) * $pageSize;
     $rows = DB::all(
-        'SELECT id,username,email,points,total_points,status,last_login_at,last_login_ip,created_at FROM users ' . $where .
+        'SELECT id,username,email,wx_openid,points,total_points,status,last_login_at,last_login_ip,created_at,inviter_id FROM users ' . $where .
         ' ORDER BY id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize,
         $params
     );
+
+    $ips = [];
+    foreach ($rows as $r) {
+        $ip = trim((string)($r['last_login_ip'] ?? ''));
+        if ($ip !== '' && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+            $ips[] = $ip;
+        }
+    }
+    $geo = $ips ? GeoIp::locateBatch($ips) : [];
+
+    $inviterIds = [];
+    foreach ($rows as $r) {
+        if (!empty($r['inviter_id'])) {
+            $inviterIds[(int)$r['inviter_id']] = true;
+        }
+    }
+    $inviterNames = [];
+    if ($inviterIds) {
+        $idList = implode(',', array_map('intval', array_keys($inviterIds)));
+        foreach (DB::all('SELECT id, username FROM users WHERE id IN (' . $idList . ')') as $n) {
+            $inviterNames[(int)$n['id']] = $n['username'];
+        }
+    }
+    $invitedCounts = [];
+    foreach (DB::all('SELECT inviter_id, COUNT(*) c FROM users WHERE inviter_id IS NOT NULL GROUP BY inviter_id') as $c) {
+        $invitedCounts[(int)$c['inviter_id']] = (int)$c['c'];
+    }
+
+    foreach ($rows as &$r) {
+        $r['wx_bound'] = trim((string)($r['wx_openid'] ?? '')) !== '';
+        unset($r['wx_openid']);
+        $r['location'] = '';
+        $ip = trim((string)($r['last_login_ip'] ?? ''));
+        if ($ip !== '' && isset($geo[$ip])) {
+            $g = $geo[$ip];
+            $prov = trim((string)($g['province'] ?? ''));
+            $city = trim((string)($g['city'] ?? ''));
+            $country = trim((string)($g['country'] ?? ''));
+            if ($prov !== '' && GeoIp::isChinaProvince($prov)) {
+                $r['location'] = $prov . ($city !== '' ? ' ' . $city : '');
+            } elseif ($country !== '') {
+                $r['location'] = $country;
+            }
+        }
+        $r['inviter_name'] = !empty($r['inviter_id'])
+            ? (isset($inviterNames[(int)$r['inviter_id']]) ? $inviterNames[(int)$r['inviter_id']] : ('#' . (int)$r['inviter_id']))
+            : '';
+        $r['invited_count'] = (int)($invitedCounts[(int)$r['id']] ?? 0);
+    }
+    unset($r);
     ok(['list' => $rows, 'total' => $total, 'page' => $page, 'pages' => $pages]);
 }
 
@@ -229,6 +315,31 @@ function admin_user_action()
             DB::execute('UPDATE users SET password=? WHERE id=?', [password_hash($pwd, PASSWORD_DEFAULT), $id]);
             ok();
             break;
+        case 'unbind_wx':
+            if (trim((string)($u['wx_openid'] ?? '')) === '') {
+                fail('该用户未绑定微信');
+            }
+            DB::execute('UPDATE users SET wx_openid=NULL WHERE id=?', [$id]);
+            DB::execute('DELETE FROM wx_bind_codes WHERE user_id=?', [$id]);
+            ok(['wx_bound' => false]);
+            break;
+        case 'set_email':
+            $email = strtolower(trim((string)input('email', '')));
+            if ($email === '') {
+                DB::execute('UPDATE users SET email=NULL WHERE id=?', [$id]);
+                ok(['email' => '']);
+                break;
+            }
+            if (mb_strlen($email) > 64 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                fail('邮箱格式不正确');
+            }
+            $exists = DB::one('SELECT id FROM users WHERE email=? AND id<>?', [$email, $id]);
+            if ($exists) {
+                fail('该邮箱已被使用');
+            }
+            DB::execute('UPDATE users SET email=? WHERE id=?', [$email, $id]);
+            ok(['email' => $email]);
+            break;
         default:
             fail('未知操作');
     }
@@ -259,13 +370,23 @@ function admin_orders()
 function admin_logs()
 {
     $page = max(1, (int)input('page', 1));
-    $total = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs');
+    $q = trim(input('q', ''));
+    $where = '';
+    $params = [];
+    if ($q !== '') {
+        $like = '%' . $q . '%';
+        $where = ' WHERE (u.username LIKE ? OR p.platform LIKE ? OR p.text LIKE ? OR p.title LIKE ?)';
+        $params = [$like, $like, $like, $like];
+    }
+    $from = ' FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id' . $where;
+    $total = (int)DB::scalar('SELECT COUNT(*)' . $from, $params);
     $pageSize = 20;
     $pages = max(1, ceil($total / $pageSize));
     $offset = ($page - 1) * $pageSize;
     $rows = DB::all(
-        'SELECT p.*, u.username FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id' .
-        ' ORDER BY p.id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize
+        'SELECT p.*, u.username' . $from .
+        ' ORDER BY p.id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize,
+        $params
     );
     ok(['list' => $rows, 'total' => $total, 'page' => $page, 'pages' => $pages]);
 }
@@ -313,17 +434,38 @@ function admin_settings_get()
              'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
                'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc', 'site_version',
                'bark_enabled', 'bark_server', 'bark_key', 'bark_sound', 'bark_notify_register', 'bark_notify_recharge',
-               'share_title', 'share_desc', 'share_image'];
+               'share_title', 'share_desc', 'share_image',
+               'wxmp_enabled', 'wxmp_appid', 'wxmp_secret', 'wxmp_token', 'wxmp_checkin_points',
+               'invite_reward_register', 'invite_reward_recharge'];
     $out = [];
     foreach ($keys as $k) {
         $out[$k] = setting($k);
     }
     // 开关类字段默认关闭，避免旧库无此 key 时下拉未选中导致保存校验失败
-    foreach (['wechat_enabled', 'epay_enabled', 'alipay_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge'] as $switchKey) {
+    foreach (['wechat_enabled', 'epay_enabled', 'alipay_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge', 'wxmp_enabled'] as $switchKey) {
         if ($out[$switchKey] === '' || $out[$switchKey] === null) {
             $out[$switchKey] = '0';
         }
     }
+    if ($out['wxmp_checkin_points'] === '' || $out['wxmp_checkin_points'] === null) {
+        $out['wxmp_checkin_points'] = '1';
+    }
+    foreach (['invite_reward_register', 'invite_reward_recharge'] as $k) {
+        if ($out[$k] === '' || $out[$k] === null) {
+            $out[$k] = '0';
+        }
+    }
+    // 敏感密钥脱敏返回：已配置则返回占位符，前端据此提示「已配置」，避免明文回传浏览器
+    foreach (['epay_private_key', 'alipay_private_key', 'wxmp_secret', 'bark_key'] as $sk) {
+        $out[$sk] = (($out[$sk] ?? '') !== '') ? '__SET__' : '';
+    }
+    $site = trim((string)cfg('site_url', ''));
+    if ($site === '') {
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443);
+        $site = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+    }
+    $out['wxmp_callback'] = rtrim($site, '/') . '/wxmp.php';
     ok($out);
 }
 
@@ -334,19 +476,32 @@ function admin_settings_save()
              'alipay_enabled', 'alipay_app_id', 'alipay_private_key', 'alipay_public_key',
              'wechat_enabled', 'wechat_name', 'wechat_qrcode', 'wechat_desc',
              'bark_enabled', 'bark_server', 'bark_key', 'bark_sound', 'bark_notify_register', 'bark_notify_recharge',
-             'share_title', 'share_desc', 'share_image'];
+              'share_title', 'share_desc', 'share_image',
+              'wxmp_enabled', 'wxmp_appid', 'wxmp_secret', 'wxmp_token', 'wxmp_checkin_points',
+              'invite_reward_register', 'invite_reward_recharge'];
     // 数字字段必须为合法的非负整数
-    $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'alipay_enabled', 'wechat_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge'];
+    $intFields = ['parse_cost', 'register_points', 'points_per_yuan', 'epay_enabled', 'alipay_enabled', 'wechat_enabled', 'bark_enabled', 'bark_notify_register', 'bark_notify_recharge', 'wxmp_enabled', 'wxmp_checkin_points', 'invite_reward_register', 'invite_reward_recharge'];
     foreach ($intFields as $k) {
         if (array_key_exists($k, $_POST) && preg_match('/^\d+$/', trim((string)$_POST[$k])) !== 1) {
             fail($k . ' 必须为非负整数');
         }
     }
+    if (array_key_exists('wxmp_checkin_points', $_POST)) {
+        $cp = (int)$_POST['wxmp_checkin_points'];
+        if ($cp < 1 || $cp > 1000000) {
+            fail('每日签到点数需在 1-1000000 之间');
+        }
+    }
+    $sensitive = ['epay_private_key', 'alipay_private_key', 'wxmp_secret', 'bark_key'];
     foreach ($fields as $k) {
         if (!array_key_exists($k, $_POST)) {
             continue;
         }
         $val = trim((string)$_POST[$k]);
+        // 敏感密钥：留空或占位符表示不修改已配置的值
+        if (in_array($k, $sensitive, true) && ($val === '' || $val === '__SET__')) {
+            continue;
+        }
         set_setting($k, $val);
     }
     ok();
@@ -371,6 +526,17 @@ function admin_apis()
         'SELECT * FROM apis ' . $where . ' ORDER BY sort ASC, id ASC LIMIT ' . (int)$offset . ',' . (int)$pageSize,
         $params
     );
+    $stats = [];
+    foreach (DB::all('SELECT api_id, COUNT(*) c, SUM(success) s, AVG(duration_ms) d FROM parse_logs WHERE api_id IS NOT NULL GROUP BY api_id') as $r) {
+        $stats[(int)$r['api_id']] = $r;
+    }
+    foreach ($rows as &$a) {
+        $st = $stats[(int)$a['id']] ?? null;
+        $a['total_calls'] = $st ? (int)$st['c'] : 0;
+        $a['success_calls'] = $st ? (int)$st['s'] : 0;
+        $a['avg_ms'] = $st ? (int)round((float)$st['d']) : 0;
+    }
+    unset($a);
     ok(['list' => $rows, 'total' => $total, 'page' => $page, 'pages' => $pages]);
 }
 
@@ -497,6 +663,7 @@ function admin_parse_type_delete()
         fail('解析类型不存在');
     }
     DB::execute('DELETE FROM parse_types WHERE id=?', [$id]);
+    DB::execute("UPDATE apis SET parse_type='' WHERE parse_type=?", [(string)$pt['key']]);
     ok();
 }
 
@@ -566,4 +733,94 @@ function admin_version_delete()
         set_setting('site_version', $latest['version']);
     }
     ok();
+}
+
+function admin_wxmp_menu()
+{
+    if (!WechatMp::configured()) {
+        fail('请先开启公众号签到并填写 AppID、AppSecret、Token');
+    }
+    try {
+        WechatMp::createMenu();
+    } catch (Throwable $e) {
+        fail($e->getMessage());
+    }
+    ok(['msg' => '自定义菜单已创建，关注用户重新进入公众号后可见「每日签到」']);
+}
+
+function admin_wxmp_check()
+{
+    $appid = trim((string)setting('wxmp_appid', ''));
+    $secret = trim((string)setting('wxmp_secret', ''));
+    $token = trim((string)setting('wxmp_token', ''));
+    $enabled = (int)setting('wxmp_enabled', 0) === 1;
+    $tips = [];
+    if (!$enabled) {
+        $tips[] = '签到开关未开启';
+    }
+    if ($appid === '') {
+        $tips[] = '未填写 AppID';
+    }
+    if ($secret === '') {
+        $tips[] = '未填写 AppSecret';
+    }
+    if ($token === '') {
+        $tips[] = '未填写 Token';
+    }
+    if ($tips) {
+        fail(implode('；', $tips) . '。请先保存配置');
+    }
+    try {
+        $ping = WechatMp::pingToken();
+    } catch (Throwable $e) {
+        fail($e->getMessage());
+    }
+    ok([
+        'ok'      => true,
+        'appid'   => $ping['appid'],
+        'message' => 'AppID / AppSecret 有效，已成功获取 access_token。请确认公众平台已配置服务器 URL 与 IP 白名单。',
+    ]);
+}
+
+/** 用户地理分布：按省级行政区聚合用户数量（基于最后登录 IP） */
+function admin_user_geo()
+{
+    $total = (int)DB::scalar('SELECT COUNT(*) FROM users');
+    $rows = DB::all("SELECT last_login_ip AS ip FROM users WHERE last_login_ip IS NOT NULL AND last_login_ip<>''");
+
+    $userIps = [];
+    $ipSet = [];
+    foreach ($rows as $r) {
+        $ip = trim((string)$r['ip']);
+        if ($ip === '' || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            continue;
+        }
+        $userIps[] = $ip;
+        $ipSet[$ip] = true;
+    }
+
+    $geo = $ipSet ? GeoIp::locateBatch(array_keys($ipSet)) : [];
+
+    $provCount = [];
+    $located = 0;
+    foreach ($userIps as $ip) {
+        $short = GeoIp::normalizeProvince($geo[$ip]['province'] ?? '');
+        if ($short !== '' && GeoIp::isChinaProvince($short)) {
+            $provCount[$short] = ($provCount[$short] ?? 0) + 1;
+            $located++;
+        }
+    }
+    arsort($provCount);
+    $provinces = [];
+    foreach ($provCount as $name => $value) {
+        $provinces[] = ['name' => $name, 'value' => $value];
+    }
+
+    ok([
+        'total'      => $total,
+        'located'    => $located,
+        'unknown'    => max(0, $total - $located),
+        'service_ok' => GeoIp::serviceOk(),
+        'provinces'  => $provinces,
+    ]);
 }

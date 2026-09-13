@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `username` VARCHAR(32) NOT NULL COMMENT '用户名',
   `password` VARCHAR(255) NOT NULL COMMENT '密码(哈希)',
   `email` VARCHAR(64) NULL COMMENT '绑定邮箱',
+  `wx_openid` VARCHAR(64) NULL COMMENT '微信公众号 OpenID',
   `points` INT NOT NULL DEFAULT 0 COMMENT '剩余点数',
   `total_points` INT NOT NULL DEFAULT 0 COMMENT '累计充值点数',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1正常 0禁用',
@@ -15,10 +16,13 @@ CREATE TABLE IF NOT EXISTS `users` (
   `last_login_ip` VARCHAR(45) NULL,
   `last_parse_ts` INT NULL COMMENT '上次解析时间戳(频率限制)',
   `remember_token` VARCHAR(64) NULL COMMENT '30天免登录令牌(存哈希)',
+  `inviter_id` INT UNSIGNED NULL COMMENT '邀请人用户ID',
+  `invite_rewarded` TINYINT NOT NULL DEFAULT 0 COMMENT '首充邀请奖励是否已发放(0未 1已)',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`),
-  UNIQUE KEY `uk_email` (`email`)
+  UNIQUE KEY `uk_email` (`email`),
+  UNIQUE KEY `uk_wx_openid` (`wx_openid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
 CREATE TABLE IF NOT EXISTS `admins` (
@@ -38,6 +42,9 @@ CREATE TABLE IF NOT EXISTS `parse_logs` (
   `title` VARCHAR(512) NULL,
   `cover` TEXT NULL,
   `video_url` TEXT NULL COMMENT '无水印地址',
+  `api_id` INT UNSIGNED NULL COMMENT '使用的接口ID(0=内置解析器)',
+  `success` TINYINT NOT NULL DEFAULT 1 COMMENT '1成功 0失败',
+  `duration_ms` INT NOT NULL DEFAULT 0 COMMENT '解析耗时(毫秒)',
   `cost` INT NOT NULL DEFAULT 0 COMMENT '消耗点数',
   `ip` VARCHAR(45) NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -116,6 +123,39 @@ CREATE TABLE IF NOT EXISTS `versions` (
   KEY `idx_version` (`version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本更新记录';
 
+CREATE TABLE IF NOT EXISTS `wx_bind_codes` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `code` VARCHAR(8) NOT NULL COMMENT '绑定码',
+  `expires_at` DATETIME NOT NULL,
+  `used_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_code` (`code`),
+  KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信绑定码';
+
+CREATE TABLE IF NOT EXISTS `wx_checkins` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `openid` VARCHAR(64) NOT NULL,
+  `points` INT NOT NULL DEFAULT 0,
+  `checkin_date` DATE NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_date` (`user_id`, `checkin_date`),
+  KEY `idx_openid` (`openid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='微信公众号签到记录';
+
+CREATE TABLE IF NOT EXISTS `ip_geo` (
+  `ip` VARCHAR(45) NOT NULL COMMENT '公网 IP',
+  `country` VARCHAR(64) NULL COMMENT '国家',
+  `province` VARCHAR(64) NULL COMMENT '省级行政区(短名)',
+  `city` VARCHAR(64) NULL COMMENT '城市',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`ip`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='IP 地理定位缓存';
+
 CREATE TABLE IF NOT EXISTS `settings` (
   `k` VARCHAR(64) NOT NULL,
   `v` TEXT NULL,
@@ -153,6 +193,11 @@ INSERT INTO `settings` (`k`, `v`) VALUES
 ('share_title', ''),
 ('share_desc', ''),
 ('share_image', ''),
+('wxmp_enabled', '0'),
+('wxmp_appid', ''),
+('wxmp_secret', ''),
+('wxmp_token', ''),
+('wxmp_checkin_points', '1'),
 ('site_version', 'v1.3.0')
 ON DUPLICATE KEY UPDATE `k`=`k`;
 
