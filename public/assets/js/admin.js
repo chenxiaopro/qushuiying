@@ -4,7 +4,7 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var toastTimer = null;
-  var state = { page: 1 };
+  var pages = { users: 1, orders: 1, logs: 1, cards: 1, apis: 1 };
 
   function toast(msg) {
     var t = $('toast');
@@ -102,7 +102,11 @@
         ['有效订单', d.orders],
         ['总营收(元)', d.income.toFixed(2)],
         ['解析次数', d.parses],
+        ['解析成功', d.parses_ok || 0],
+        ['解析失败', d.parses_fail || 0],
         ['今日解析', d.parses_today],
+        ['今日成功', d.parses_today_ok || 0],
+        ['平均耗时(ms)', d.parse_avg_ms || 0],
         ['累计充值点数', d.points_total],
         ['未用卡密', d.cards_unused],
         ['已绑微信', d.wx_bound || 0],
@@ -116,12 +120,14 @@
         $('recentParses').innerHTML = '<p style="color:#8a90a3">暂无解析记录</p>';
       } else {
         $('recentParses').innerHTML =
-          '<div class="table-wrap"><table><thead><tr><th>用户</th><th>平台</th><th>标题</th><th>消耗</th><th>时间</th></tr></thead><tbody>' +
+          '<div class="table-wrap"><table><thead><tr><th>用户</th><th>平台</th><th>标题</th><th>结果</th><th>耗时</th><th>消耗</th><th>时间</th></tr></thead><tbody>' +
           recent.map(function (p) {
             return '<tr>' +
               '<td>' + esc(p.username || '-') + '</td>' +
               '<td>' + esc(p.platform || '-') + '</td>' +
               '<td>' + esc(p.title || '-') + '</td>' +
+              '<td>' + logResult(p) + '</td>' +
+              '<td>' + logDuration(p) + '</td>' +
               '<td>' + p.cost + '</td>' +
               '<td>' + esc(p.created_at) + '</td>' +
               '</tr>';
@@ -270,8 +276,8 @@
 
   /* ---------- 用户管理 ---------- */
   function loadUsers(page, q) {
-    state.page = page || 1;
-    adminApi('users', { page: state.page, q: q || $('userSearch').value.trim() })
+    pages.users = page || 1;
+    adminApi('users', { page: pages.users, q: q || $('userSearch').value.trim() })
       .then(function (res) {
         if (!checkAuth(res)) return;
         var d = res.data;
@@ -318,7 +324,7 @@
         if (act === 'toggle') {
           adminApi('user_action', { id: id, sub: 'toggle' }).then(function (res) {
             if (!checkAuth(res)) return;
-            toast('已更新'); loadUsers(state.page);
+            toast('已更新'); loadUsers(pages.users);
           });
         } else if (act === 'add' || act === 'deduct') {
           openUserModal(id, act === 'add' ? '增加点数' : '扣除点数', 'points');
@@ -330,7 +336,7 @@
           adminApi('user_action', { id: id, sub: 'unbind_wx' }).then(function (res) {
             if (!checkAuth(res)) return;
             if (res.code !== 0) { toast(res.msg); return; }
-            toast('已解绑微信'); loadUsers(state.page);
+            toast('已解绑微信'); loadUsers(pages.users);
           });
         }
       });
@@ -364,7 +370,7 @@
         if (res.code !== 0) { toast(res.msg); return; }
         $('userModal').classList.add('hide');
         toast('操作成功');
-        loadUsers(state.page);
+        loadUsers(pages.users);
       });
     });
   }
@@ -372,8 +378,8 @@
 
   /* ---------- 订单 ---------- */
   function loadOrders(page, status) {
-    state.page = page || 1;
-    adminApi('orders', { page: state.page, status: status || '' }).then(function (res) {
+    pages.orders = page || 1;
+    adminApi('orders', { page: pages.orders, status: status || '' }).then(function (res) {
       if (!checkAuth(res)) return;
       var d = res.data;
       if (!d.list.length) { $('ordersTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
@@ -399,22 +405,34 @@
   }
   $('orderFilterBtn').addEventListener('click', function () { loadOrders(1, $('orderStatus').value); });
 
+  function logResult(p) {
+    return String(p.success) === '0'
+      ? '<span class="badge-off">失败</span>'
+      : '<span class="badge-ok">成功</span>';
+  }
+  function logDuration(p) {
+    var ms = parseInt(p.duration_ms, 10);
+    return ms > 0 ? (ms + ' ms') : '<span class="muted">-</span>';
+  }
+
   /* ---------- 解析记录 ---------- */
-  function loadLogs(page) {
-    state.page = page || 1;
-    adminApi('logs', { page: state.page }).then(function (res) {
+  function loadLogs(page, q) {
+    pages.logs = page || 1;
+    adminApi('logs', { page: pages.logs, q: q || $('logSearch').value.trim() }).then(function (res) {
       if (!checkAuth(res)) return;
       var d = res.data;
       if (!d.list.length) { $('logsTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
       else {
         $('logsTable').innerHTML =
-          '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户</th><th>平台</th><th>内容</th><th>消耗</th><th>IP</th><th>时间</th></tr></thead><tbody>' +
+          '<div class="table-wrap"><table><thead><tr><th>ID</th><th>用户</th><th>平台</th><th>内容</th><th>结果</th><th>耗时</th><th>消耗</th><th>IP</th><th>时间</th></tr></thead><tbody>' +
           d.list.map(function (p) {
             return '<tr>' +
               '<td>' + p.id + '</td>' +
               '<td>' + esc(p.username || '-') + '</td>' +
               '<td>' + esc(p.platform || '-') + '</td>' +
               '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(p.text) + '">' + esc(p.text) + '</td>' +
+              '<td>' + logResult(p) + '</td>' +
+              '<td>' + logDuration(p) + '</td>' +
               '<td>' + p.cost + '</td>' +
               '<td>' + esc(p.ip || '-') + '</td>' +
               '<td>' + esc(p.created_at) + '</td></tr>';
@@ -423,11 +441,13 @@
       $('logsPager').innerHTML = pager(d.page, d.pages, function (p) { loadLogs(p); });
     });
   }
+  $('logSearchBtn').addEventListener('click', function () { loadLogs(1); });
+  $('logSearch').addEventListener('keydown', function (e) { if (e.key === 'Enter') loadLogs(1); });
 
   /* ---------- 卡密 ---------- */
   function loadCards(page) {
-    state.page = page || 1;
-    adminApi('cards', { page: state.page }).then(function (res) {
+    pages.cards = page || 1;
+    adminApi('cards', { page: pages.cards }).then(function (res) {
       if (!checkAuth(res)) return;
       var d = res.data;
       if (!d.list.length) { $('cardsTable').innerHTML = '<p style="color:#8a90a3">暂无数据</p>'; }
@@ -969,8 +989,8 @@
   }
 
   function loadApis(page, q) {
-    state.page = page || 1;
-    adminApi('apis', { page: state.page, q: q || $('apiSearch').value.trim() })
+    pages.apis = page || 1;
+    adminApi('apis', { page: pages.apis, q: q || $('apiSearch').value.trim() })
       .then(function (res) {
         if (!checkAuth(res)) return;
         var d = res.data;
@@ -1023,7 +1043,7 @@
         adminApi('api_delete', { id: b.getAttribute('data-api-del') }).then(function (res) {
           if (!checkAuth(res)) return;
           toast('已删除');
-          loadApis(state.page);
+          loadApis(pages.apis);
         });
       });
     });
@@ -1089,13 +1109,6 @@
   });
 
   $('apiModal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hide'); });
-
-  // 预加载接口数据用于编辑回填
-  adminApi('apis', { page: 1 }).then(function (res) {
-    if (res.code === 0) {
-      (res.data.list || []).forEach(function (a) { apiDataCache[a.id] = a; });
-    }
-  });
 
   /* ---------- 分页 ---------- */
   function pager(page, pages, cb) {

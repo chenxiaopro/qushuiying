@@ -80,7 +80,7 @@ $csrf = csrf_token();
 <?php if ($shareImage !== ''): ?>
 <meta name="twitter:image" content="<?= htmlspecialchars($shareImage) ?>">
 <?php endif; ?>
-<link rel="stylesheet" href="assets/css/style.css?v=20260912">
+<link rel="stylesheet" href="assets/css/style.css?v=20260913">
 </head>
 <body>
 
@@ -424,6 +424,6 @@ window.WM = {
   csrf: <?= json_encode($csrf) ?>
 };
 </script>
-<script src="assets/js/app.js?v=20260912"></script>
+<script src="assets/js/app.js?v=20260913"></script>
 </body>
 </html>

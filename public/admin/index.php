@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../app/init.php';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>后台管理 - <?= htmlspecialchars(setting('site_name', '短视频去水印')) ?></title>
-<link rel="stylesheet" href="../assets/css/admin.css?v=20260912c">
+<link rel="stylesheet" href="../assets/css/admin.css?v=20260913">
 </head>
 <body>
 
@@ -148,6 +148,10 @@ require_once __DIR__ . '/../../app/init.php';
     <div class="page hide" data-name="logs">
       <div class="page-title">解析记录</div>
       <div class="card">
+        <div class="toolbar">
+          <input class="field" id="logSearch" placeholder="搜索用户名 / 平台 / 内容">
+          <button class="btn btn-primary" id="logSearchBtn">搜索</button>
+        </div>
         <div id="logsTable"></div>
         <div class="pager" id="logsPager"></div>
       </div>
@@ -186,6 +190,17 @@ require_once __DIR__ . '/../../app/init.php';
     <!-- 设置 -->
     <div class="page hide" data-name="settings">
       <div class="page-title">站点设置</div>
+      <nav class="settings-toc">
+        <a href="#sec-basic">基础</a>
+        <a href="#sec-wechat">公众号弹窗</a>
+        <a href="#sec-wxmp">签到</a>
+        <a href="#sec-invite">邀请返利</a>
+        <a href="#sec-share">分享卡片</a>
+        <a href="#sec-epay">易支付</a>
+        <a href="#sec-alipay">当面付</a>
+        <a href="#sec-bark">Bark</a>
+      </nav>
+      <div class="page-title" id="sec-basic">基础设置</div>
       <div class="card">
         <div class="form-grid">
           <div>
@@ -223,7 +238,7 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveSettingsBtn" style="margin-top:16px">保存基础设置</button>
       </div>
 
-      <div class="page-title">公众号弹窗引导</div>
+      <div class="page-title" id="sec-wechat">公众号弹窗引导</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">开启后前台会弹出公众号引导弹窗，用户关闭后 7 天内不再显示</div>
         <div class="form-grid">
@@ -250,7 +265,7 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveWechatBtn" style="margin-top:16px">保存公众号设置</button>
       </div>
 
-      <div class="page-title">公众号签到</div>
+      <div class="page-title" id="sec-wxmp">公众号签到</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">用户在网站生成绑定码，发给公众号完成绑定后，点击自定义菜单「每日签到」领取点数。请先在微信公众平台填写下方服务器 URL 与 Token。</div>
         <div class="form-grid">
@@ -292,7 +307,7 @@ require_once __DIR__ . '/../../app/init.php';
         <div class="hide" id="wxmpCheckResult" style="margin-top:14px;font-size:13px"></div>
       </div>
 
-      <div class="page-title">邀请返利</div>
+      <div class="page-title" id="sec-invite">邀请返利</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">用户中心会展示专属邀请链接（?invite=用户ID）。好友通过链接注册、完成首次充值后，邀请人可获得对应奖励。填 0 表示关闭该项奖励。</div>
         <div class="form-grid">
@@ -308,7 +323,7 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveInviteBtn" style="margin-top:16px">保存邀请设置</button>
       </div>
 
-      <div class="page-title">微信 / QQ 分享卡片</div>
+      <div class="page-title" id="sec-share">微信 / QQ 分享卡片</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">好友、群、朋友圈、QQ 空间识别链接时展示的标题、描述和封面图。留空则回退到站点名称与站点描述。封面图请使用可公网访问的完整图片 URL（建议 300x300 以上）。</div>
         <div class="form-grid">
@@ -328,7 +343,7 @@ require_once __DIR__ . '/../../app/init.php';
         <button class="btn btn-primary" id="saveShareBtn" style="margin-top:16px">保存分享设置</button>
       </div>
 
-      <div class="page-title">易支付配置</div>
+      <div class="page-title" id="sec-epay">易支付配置</div>
       <div class="card">
         <div class="form-grid">
           <div>
@@ -369,7 +384,7 @@ require_once __DIR__ . '/../../app/init.php';
         </p>
       </div>
 
-      <div class="page-title">支付宝当面付配置</div>
+      <div class="page-title" id="sec-alipay">支付宝当面付配置</div>
       <div class="card">
         <div class="form-grid">
           <div>
@@ -400,7 +415,7 @@ require_once __DIR__ . '/../../app/init.php';
         </p>
       </div>
 
-      <div class="page-title">Bark 通知配置</div>
+      <div class="page-title" id="sec-bark">Bark 通知配置</div>
       <div class="card">
         <div class="page-sub" style="margin-bottom:14px">通过 Bark 向管理员推送「用户注册」「用户充值」通知。服务器地址留空使用官方 <code>https://api.day.app</code>。</div>
         <div class="form-grid">
@@ -584,6 +599,6 @@ window.ADMIN = {
   csrf: <?= json_encode(csrf_token()) ?>
 };
 </script>
-<script src="../assets/js/admin.js?v=20260912c"></script>
+<script src="../assets/js/admin.js?v=20260913"></script>
 </body>
 </html>

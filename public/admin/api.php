@@ -178,14 +178,22 @@ function admin_login()
 function admin_stats()
 {
     $today = date('Y-m-d');
-    $recent = DB::all('SELECT p.id, u.username, p.platform, p.title, p.cost, p.created_at FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.id DESC LIMIT 8');
+    $parseOk = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE success=1');
+    $parseFail = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE success=0');
+    $parseTodayOk = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE success=1 AND DATE(created_at)=?', [$today]);
+    $avgMs = (int)round((float)DB::scalar('SELECT IFNULL(AVG(duration_ms),0) FROM parse_logs WHERE duration_ms>0'));
+    $recent = DB::all('SELECT p.id, u.username, p.platform, p.title, p.cost, p.success, p.duration_ms, p.created_at FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.id DESC LIMIT 8');
     ok([
         'users'       => (int)DB::scalar('SELECT COUNT(*) FROM users'),
         'users_today' => (int)DB::scalar('SELECT COUNT(*) FROM users WHERE DATE(created_at)=?', [$today]),
         'orders'      => (int)DB::scalar('SELECT COUNT(*) FROM orders WHERE status=1'),
         'income'      => (float)DB::scalar('SELECT IFNULL(SUM(amount),0) FROM orders WHERE status=1'),
-        'parses'      => (int)DB::scalar('SELECT COUNT(*) FROM parse_logs'),
+        'parses'      => $parseOk + $parseFail,
+        'parses_ok'   => $parseOk,
+        'parses_fail' => $parseFail,
         'parses_today'=> (int)DB::scalar('SELECT COUNT(*) FROM parse_logs WHERE DATE(created_at)=?', [$today]),
+        'parses_today_ok' => $parseTodayOk,
+        'parse_avg_ms'=> $avgMs,
         'points_total'=> (int)DB::scalar('SELECT IFNULL(SUM(total_points),0) FROM users'),
         'cards_unused'=> (int)DB::scalar('SELECT COUNT(*) FROM cards WHERE status=0'),
         'wx_bound'    => (int)DB::scalar("SELECT COUNT(*) FROM users WHERE wx_openid IS NOT NULL AND wx_openid<>''"),
@@ -362,13 +370,23 @@ function admin_orders()
 function admin_logs()
 {
     $page = max(1, (int)input('page', 1));
-    $total = (int)DB::scalar('SELECT COUNT(*) FROM parse_logs');
+    $q = trim(input('q', ''));
+    $where = '';
+    $params = [];
+    if ($q !== '') {
+        $like = '%' . $q . '%';
+        $where = ' WHERE (u.username LIKE ? OR p.platform LIKE ? OR p.text LIKE ? OR p.title LIKE ?)';
+        $params = [$like, $like, $like, $like];
+    }
+    $from = ' FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id' . $where;
+    $total = (int)DB::scalar('SELECT COUNT(*)' . $from, $params);
     $pageSize = 20;
     $pages = max(1, ceil($total / $pageSize));
     $offset = ($page - 1) * $pageSize;
     $rows = DB::all(
-        'SELECT p.*, u.username FROM parse_logs p LEFT JOIN users u ON u.id=p.user_id' .
-        ' ORDER BY p.id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize
+        'SELECT p.*, u.username' . $from .
+        ' ORDER BY p.id DESC LIMIT ' . (int)$offset . ',' . (int)$pageSize,
+        $params
     );
     ok(['list' => $rows, 'total' => $total, 'page' => $page, 'pages' => $pages]);
 }

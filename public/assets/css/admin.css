@@ -30,6 +30,8 @@ a { color: var(--primary); text-decoration: none; }
   color: #fff; box-shadow: 0 6px 14px rgba(47, 107, 255, .28);
 }
 .btn-danger { background: #ff5d5d; color: #fff; }
+.btn-ghost { background: #fff; border-color: var(--border); }
+.btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
 .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
 .btn-block { width: 100%; }
 
@@ -260,3 +262,13 @@ label { font-size: 13px; color: var(--muted); display: block; margin: 12px 0 6px
 .rate-ok { color: #0f766e; }
 .rate-warn { color: #b45309; }
 .rate-bad { color: #dc2626; }
+
+.settings-toc {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 18px;
+}
+.settings-toc a {
+  font-size: 12px; color: var(--muted); background: #fff;
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+}
+.settings-toc a:hover { color: var(--primary); border-color: var(--primary); }
+.page [id^="sec-"] { scroll-margin-top: 12px; }
